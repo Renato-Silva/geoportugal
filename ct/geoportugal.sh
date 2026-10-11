@@ -12,8 +12,8 @@ var_tags="${var_tags:-maps;gis}"
 var_cpu="${var_cpu:-2}"
 # The Nuxt build needs ~2 GB; the running server much less.
 var_ram="${var_ram:-2048}"
-# Fetched photos and orthophoto tiles are kept on disk (unless S3 is configured), so leave room to grow
-var_disk="${var_disk:-20}"
+# Enough for the app; fetched imagery is meant to go to S3 (without S3 it grows on this disk, ~1 MB per photo)
+var_disk="${var_disk:-6}"
 var_os="${var_os:-debian}"
 var_version="${var_version:-13}"
 var_arm64="${var_arm64:-yes}"
@@ -85,4 +85,4 @@ msg_ok "Completed successfully!\n"
 echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
 echo -e "${INFO}${YW}Access it using the following URL:${CL}"
 echo -e "${GATEWAY}${BGN}http://${IP}:3000${CL}"
-echo -e "${INFO}${YW}Settings: /opt/geoportugal/.env (then: systemctl restart geoportugal)${CL}"
+echo -e "${INFO}${YW}Set the S3 bucket in /opt/geoportugal/.env, then: systemctl restart geoportugal${CL}"

@@ -21,17 +21,17 @@ the Proxmox host shell:
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/Renato-Silva/geoportugal/master/ct/geoportugal.sh)"
 ```
 
-Pick *Default* (Debian 13, unprivileged, 2 CPU, 2 GB RAM, 20 GB disk) or *Advanced* to change the container ID,
-storage, network, resources and so on. The 2 GB of RAM is for the build. The disk holds the imagery archive,
-which grows as photos are viewed (see [Image storage](#image-storage)). When it finishes, it prints the URL
-(`http://<ip>:3000`).
+Pick *Default* (Debian 13, unprivileged, 2 CPU, 2 GB RAM, 6 GB disk) or *Advanced* to change the container ID,
+storage, network, resources and so on. The 2 GB of RAM is for the build. The 6 GB disk assumes imagery goes to S3
+(see [Image storage](#image-storage)); without S3 the archive grows on local disk at about 1 MB per photo viewed.
+When it finishes, it prints the URL (`http://<ip>:3000`).
 
 Inside the container:
 
-- Settings: edit `/opt/geoportugal/.env` (e.g. S3 storage), then run `systemctl restart geoportugal`
+- Settings: edit `/opt/geoportugal/.env` (set the `NUXT_S3_*` values), then run `systemctl restart geoportugal`
 - Update to the latest `master`: `update`
 - Logs: `journalctl -u geoportugal -f`
-- Imagery archive: `/var/lib/geoportugal/archive`
+- Imagery archive without S3: `/var/lib/geoportugal/archive`
 
 The scripts are `ct/geoportugal.sh` (runs on the host) and `install/geoportugal-install.sh` (runs in the container).
 
