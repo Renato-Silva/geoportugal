@@ -1,0 +1,195 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Darkroom / archive palette: paper & ink by day, blackout & safelight by night. */
+:root {
+  --paper: #f5f6f8;
+  --paper-2: #eef0f3;
+  --card: #ffffff;
+  --ink: #0f1115;
+  --ink-2: #4b5563;
+  --ink-3: #8b93a1;
+  --rule: #e3e6eb;
+  --accent: #1f6fff;
+  --accent-ink: #ffffff;
+  --accent-soft: #1f6fff1a;
+  --focus: #1f6fff;
+  --glass: rgb(255 255 255 / .82);
+  --shadow: 0 1px 2px rgb(15 17 21 / .06), 0 12px 32px -12px rgb(15 17 21 / .18);
+  color-scheme: light;
+}
+
+.dark {
+  --paper: #0c0d10;
+  --paper-2: #1a1c21;
+  --card: #15171b;
+  --ink: #f2f4f7;
+  --ink-2: #a9b0bc;
+  --ink-3: #6b7280;
+  --rule: #262930;
+  --accent: #4c8dff;
+  --accent-ink: #ffffff;
+  --accent-soft: #4c8dff24;
+  --focus: #6aa1ff;
+  --glass: rgb(21 23 27 / .82);
+  --shadow: 0 1px 2px rgb(0 0 0 / .4), 0 16px 40px -12px rgb(0 0 0 / .6);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-paper-2: var(--paper-2);
+  --color-card: var(--card);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-rule: var(--rule);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --font-display: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, monospace;
+  --color-glass: var(--glass);
+  --shadow-panel: var(--shadow);
+}
+
+html, body, #__nuxt {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+/* Frosted panels over the map (layered so utilities like `absolute` still win) */
+@layer components {
+  .grain {
+    background: var(--glass);
+    -webkit-backdrop-filter: blur(20px) saturate(1.6);
+    backdrop-filter: blur(20px) saturate(1.6);
+  }
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* Thin, quiet scrollbars */
+.scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--rule) transparent;
+}
+
+/* Small secondary labels (ids, counts, captions) */
+.edge-print {
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Range input */
+input[type="range"].range {
+  appearance: none;
+  height: 18px;
+  background: transparent;
+  width: 100%;
+  cursor: pointer;
+}
+input[type="range"].range::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 3px;
+  background: linear-gradient(to right, var(--accent) var(--pct, 50%), var(--rule) var(--pct, 50%));
+}
+input[type="range"].range::-moz-range-track {
+  height: 3px;
+  border-radius: 3px;
+  background: var(--rule);
+}
+input[type="range"].range::-moz-range-progress {
+  height: 3px;
+  border-radius: 3px;
+  background: var(--accent);
+}
+input[type="range"].range::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -5.5px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--accent);
+  box-shadow: 0 1px 3px rgb(0 0 0 / .25);
+}
+input[type="range"].range::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--card);
+  border: 2px solid var(--accent);
+}
+
+/* Staggered reveal for result frames */
+@keyframes develop {
+  from { opacity: 0; transform: scale(.97); }
+  to { opacity: 1; filter: none; transform: none; }
+}
+.develop {
+  animation: develop .35s cubic-bezier(.2, .7, .2, 1) both;
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+.rise {
+  animation: rise .45s cubic-bezier(.2, .7, .2, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .develop, .rise { animation: none; }
+}
+
+/* MapLibre chrome, re-skinned */
+.maplibregl-ctrl-group {
+  background: var(--card) !important;
+  border-radius: 10px !important;
+  box-shadow: var(--shadow) !important;
+  overflow: hidden;
+}
+.maplibregl-ctrl-group button {
+  width: 34px !important;
+  height: 34px !important;
+}
+.maplibregl-ctrl-group button + button {
+  border-top: 1px solid var(--rule) !important;
+}
+.dark .maplibregl-ctrl-group button .maplibregl-ctrl-icon {
+  filter: invert(1) hue-rotate(180deg);
+}
+.maplibregl-ctrl-attrib {
+  background: color-mix(in srgb, var(--card) 80%, transparent) !important;
+  color: var(--ink-3);
+  font-size: 10px;
+}
+.maplibregl-ctrl-attrib a {
+  color: var(--ink-2) !important;
+}
+.dark .maplibregl-ctrl-attrib-button {
+  filter: invert(1);
+}
+.maplibregl-ctrl-scale {
+  background: color-mix(in srgb, var(--card) 75%, transparent) !important;
+  border-color: var(--ink-2) !important;
+  color: var(--ink-2) !important;
+  font-family: var(--font-mono);
+  font-size: 10px !important;
+}
