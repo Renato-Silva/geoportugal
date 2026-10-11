@@ -3,7 +3,7 @@ import {
   AttributionControl, GeolocateControl, Map as MlMap, NavigationControl, ScaleControl,
   type GeoJSONSource, type ImageSource, type MapMouseEvent, type MapTouchEvent, type StyleSpecification,
 } from 'maplibre-gl'
-import type { Bbox, Photo } from '~/utils/types'
+import type { Bbox, Photo, PhotoLocation } from '~/utils/types'
 import { bboxCorners, bboxPolygon, pointBbox } from '~/utils/geo'
 import { yearColorExpression } from '~/utils/colors'
 import { photosAsGeoJSON } from '~/utils/wfs'
@@ -55,6 +55,18 @@ const BASEMAP_SOURCES: Record<string, StyleSpecification['sources'][string]> = {
   }])),
 }
 
+const caopWms = (ws: string, layer: string) =>
+  `https://geo2.dgterritorio.gov.pt/geoserver/${ws}/wms?service=WMS&version=1.1.1&request=GetMap&layers=${layer}`
+  + '&styles=&srs=EPSG:3857&bbox={bbox-epsg-3857}&width=256&height=256&format=image/png&transparent=true'
+
+/** Administrative boundary lines (CAOP), drawn above photos and labels when enabled. */
+const BOUNDARY_SOURCES: Record<string, StyleSpecification['sources'][string]> = {
+  'caop-cont': { type: 'raster', tileSize: 256, minzoom: 7, bounds: [-9.6, 36.9, -6.1, 42.2], tiles: [caopWms('caop_continente', 'cont_trocos')], attribution: 'CAOP © DGT' },
+  'caop-ram': { type: 'raster', tileSize: 256, minzoom: 7, bounds: [-17.4, 32.3, -16.2, 33.2], tiles: [caopWms('caop_ram', 'ram_trocos')] },
+  'caop-raa-co': { type: 'raster', tileSize: 256, minzoom: 7, bounds: [-28.9, 36.9, -24.7, 39.2], tiles: [caopWms('caop_raa', 'raa_cen_ori_trocos')] },
+  'caop-raa-oci': { type: 'raster', tileSize: 256, minzoom: 7, bounds: [-31.4, 39.3, -31.0, 39.8], tiles: [caopWms('caop_raa', 'raa_oci_trocos')] },
+}
+
 const LABEL_SOURCES: Record<string, StyleSpecification['sources'][string]> = {
   'lb-light': {
     type: 'raster', tileSize: 256, maxzoom: 16,
@@ -86,6 +98,7 @@ function buildStyle(): StyleSpecification {
     sources: {
       ...BASEMAP_SOURCES,
       ...LABEL_SOURCES,
+      ...BOUNDARY_SOURCES,
       area: { type: 'geojson', data: emptyFC },
       footprints: { type: 'geojson', data: emptyFC, promoteId: 'uid' },
       draw: { type: 'geojson', data: emptyFC },
@@ -102,6 +115,12 @@ function buildStyle(): StyleSpecification {
         id, type: 'raster' as const, source: id,
         layout: { visibility: (id === labelLayerId() ? 'visible' : 'none') as 'visible' | 'none' },
         paint: { 'raster-opacity': 0.9 },
+      })),
+      // DGT draws these in pale green; desaturate them into neutral lines
+      ...Object.keys(BOUNDARY_SOURCES).map(id => ({
+        id, type: 'raster' as const, source: id,
+        layout: { visibility: (store.showBoundaries.value ? 'visible' : 'none') as 'visible' | 'none' },
+        paint: { 'raster-saturation': -1, 'raster-opacity': 0.9, ...boundaryBrightness() },
       })),
       {
         id: 'area-fill', type: 'fill', source: 'area', filter: ['==', '$type', 'Polygon'],
@@ -238,9 +257,13 @@ function syncArea() {
   if (!s) return
   const a = store.area.value
   if (!a) return s.setData(emptyFC)
+  const b = store.boundary.value
+  // An administrative area is drawn by its exact boundary once it has loaded
+  if (a.admin && !b) return s.setData(emptyFC)
   const features: GeoJSON.Feature[] = []
-  if (a.kind === 'point' && a.point) features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: a.point }, properties: {} })
-  else features.push({ type: 'Feature', geometry: bboxPolygon(a.bbox), properties: {} })
+  if (b) features.push({ type: 'Feature', geometry: b.geometry, properties: {} })
+  else if (a.kind !== 'point') features.push({ type: 'Feature', geometry: bboxPolygon(a.bbox), properties: {} })
+  if (a.point) features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: a.point }, properties: {} })
   s.setData({ type: 'FeatureCollection', features })
 }
 
@@ -283,7 +306,10 @@ function syncOverlays() {
 watch(store.photos, syncFootprints)
 watch(store.overlays, () => { syncOverlays(); syncFootprints() }, { deep: true })
 watch(store.cleanEdges, syncOverlays)
-watch(store.area, syncArea)
+watch([store.area, store.boundary], syncArea)
+watch(store.showBoundaries, (show) => {
+  for (const id of Object.keys(BOUNDARY_SOURCES)) map?.setLayoutProperty(id, 'visibility', show ? 'visible' : 'none')
+})
 watch(store.showFootprints, (show) => {
   for (const id of ['footprints-fill', 'footprints-line']) map?.setLayoutProperty(id, 'visibility', show ? 'visible' : 'none')
 })
@@ -311,10 +337,24 @@ watch(isDark, () => {
   map.setPaintProperty('draw-fill', 'fill-color', accent)
   map.setPaintProperty('draw-line', 'line-color', accent)
   map.setPaintProperty('bg', 'background-color', isDark.value ? '#0c0d10' : '#f5f6f8')
+
 })
+
+/** Boundary lines: light over imagery or the dark map, dark over the light map. */
+function boundaryBrightness() {
+  const light = isDark.value || store.basemap.value === 'satellite' || store.basemap.value.startsWith('ortos')
+  return light
+    ? { 'raster-brightness-min': 0.9, 'raster-brightness-max': 1 }
+    : { 'raster-brightness-min': 0, 'raster-brightness-max': 0.35 }
+}
 
 function applyBasemap() {
   if (!map) return
+  const bright = boundaryBrightness()
+  for (const id of Object.keys(BOUNDARY_SOURCES)) {
+    map.setPaintProperty(id, 'raster-brightness-min', bright['raster-brightness-min'])
+    map.setPaintProperty(id, 'raster-brightness-max', bright['raster-brightness-max'])
+  }
   for (const id of Object.keys(BASEMAP_SOURCES)) map.setLayoutProperty(id, 'visibility', isBasemapVisible(id) ? 'visible' : 'none')
   for (const id of Object.keys(LABEL_SOURCES)) map.setLayoutProperty(id, 'visibility', id === labelLayerId() ? 'visible' : 'none')
   if (compareMap) setupCompareLayer()
@@ -351,12 +391,19 @@ function photoByUid(uid: string) {
 function onClick(e: MapMouseEvent) {
   if (store.mode.value === 'point') {
     const pt: [number, number] = [e.lngLat.lng, e.lngLat.lat]
-    store.setArea({
-      kind: 'point',
-      label: t('area.pointLabel', { lat: pt[1].toFixed(4), lng: pt[0].toFixed(4) }),
-      bbox: pointBbox(pt),
-      point: pt,
-    })
+    store.mode.value = 'pan'
+    // Name the spot by its parish when we can (quick, cached lookup)
+    $fetch<PhotoLocation>('/api/locate', { query: { lon: pt[0], lat: pt[1] }, timeout: 2500 })
+      .catch(() => ({} as PhotoLocation))
+      .then((loc) => {
+        const where = loc.parish ? `${loc.parish.name}, ${loc.municipality}` : null
+        store.setArea({
+          kind: 'point',
+          label: where ? `${t('area.point')} · ${where}` : t('area.pointLabel', { lat: pt[1].toFixed(4), lng: pt[0].toFixed(4) }),
+          bbox: pointBbox(pt),
+          point: pt,
+        })
+      })
     return
   }
   if (store.mode.value !== 'pan' || !store.showFootprints.value) return

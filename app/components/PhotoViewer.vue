@@ -2,6 +2,7 @@
 import { photoUrl, sourceUrl } from '~/utils/photoUrl'
 import { formatCount, formatDate, formatScale } from '~/utils/format'
 import { yearColor } from '~/utils/colors'
+import type { PhotoLocation } from '~/utils/types'
 
 const store = useFototeca()
 const { t, lang } = useI18n()
@@ -12,6 +13,19 @@ const v = computed(() => store.viewer.value)
 const photo = computed(() => v.value?.list[v.value.index] ?? null)
 const onMap = computed(() => !!photo.value && store.overlayUids.value.has(photo.value.uid))
 const fav = computed(() => !!photo.value && store.favUids.value.has(photo.value.uid))
+
+// where the photo is (parish / municipality), from the CAOP boundaries --------
+const location = ref<PhotoLocation | null>(null)
+watch(photo, async (p) => {
+  location.value = null
+  if (!p) return
+  const [w, s, e, n] = p.bbox
+  try {
+    const loc = await $fetch<PhotoLocation>('/api/locate', { query: { lon: (w + e) / 2, lat: (s + n) / 2 } })
+    if (photo.value === p) location.value = loc
+  }
+  catch { /* location is optional */ }
+}, { immediate: true })
 
 // zoom & pan --------------------------------------------------------------
 const stage = ref<HTMLDivElement>()
@@ -115,7 +129,9 @@ function showOnMap() {
 const meta = computed(() => {
   const p = photo.value
   if (!p) return []
+  const loc = location.value
   return [
+    ...(loc?.municipality ? [[t('photo.location'), [loc.parish?.name, loc.municipality].filter(Boolean).join(', ')] as const] : []),
     [t('photo.date'), formatDate(p.date, lang.value)],
     [t('photo.scale'), formatScale(p.scale, lang.value)],
     [t('photo.roll'), p.rolo],
@@ -230,7 +246,7 @@ const meta = computed(() => {
         <dl class="m-5 divide-y divide-rule rounded-xl border border-rule text-sm">
           <div v-for="[k, val] in meta" :key="k" class="flex justify-between gap-4 px-3 py-2">
             <dt class="text-ink-3">{{ k }}</dt>
-            <dd class="truncate text-right font-mono text-[12.5px]">{{ val }}</dd>
+            <dd class="text-right font-mono text-[12.5px]" :class="k === t('photo.location') ? 'font-sans text-[13px]' : 'truncate'">{{ val }}</dd>
           </div>
         </dl>
 

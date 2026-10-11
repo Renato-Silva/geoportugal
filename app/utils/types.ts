@@ -22,21 +22,56 @@ export interface Photo {
   geometry: GeoJSON.Polygon
 }
 
-export type AreaKind = 'place' | 'view' | 'box' | 'point'
+export type AreaKind = 'place' | 'admin' | 'view' | 'box' | 'point'
+export type AdminLevel = 'district' | 'municipality' | 'parish'
 
 export interface Area {
   kind: AreaKind
   label: string
   bbox: Bbox
-  /** for point searches: the clicked location */
+  /** for point / place searches: the location itself */
   point?: [number, number]
+  /** for administrative areas: which unit (its boundary is fetched on demand) */
+  admin?: { level: AdminLevel, code: string }
 }
 
-export interface Place {
-  id: string
+export interface Boundary {
+  level: AdminLevel
+  code: string
   name: string
   context: string
   bbox: Bbox
+  geometry: GeoJSON.MultiPolygon
+  /** simplified polygon in EPSG:3763, for WFS filters */
+  wkt: string
+}
+
+export interface AdminUnit {
+  level: AdminLevel
+  code: string
+  name: string
+  municipality?: string
+  district: string
+}
+
+export interface GeoPlace {
+  id: string
+  name: string
+  type: string
+  municipality: string | null
+  parish: string | null
+  point: [number, number]
+}
+
+export interface PlaceResults {
+  admin: AdminUnit[]
+  places: GeoPlace[]
+}
+
+export interface PhotoLocation {
+  parish?: { code: string, name: string }
+  municipality?: string
+  district?: string
 }
 
 export interface YearScaleCount {
@@ -53,6 +88,8 @@ export interface Overlay {
 
 export interface PhotoFilter {
   bbox: Bbox
+  /** exact area (EPSG:3763 WKT); when set it replaces the bbox test */
+  wkt?: string
   years: [number, number]
   scales: number[]
 }

@@ -1,4 +1,4 @@
-import type { Bbox, Photo, PhotoFilter } from './types'
+import type { Photo, PhotoFilter, YearScaleCount } from './types'
 import { bboxOfRing } from './geo'
 
 // GeoServer behind the Fototeca. Unlike the legacy endpoints it sends CORS headers,
@@ -21,7 +21,7 @@ interface WfsResponse {
 const quote = (s: string) => `'${s.replace(/'/g, '\'\'')}'`
 
 export function buildCql(f: PhotoFilter) {
-  const parts = [`BBOX(the_geom,${f.bbox.join(',')},'EPSG:4326')`]
+  const parts = [f.wkt ? `INTERSECTS(the_geom, ${f.wkt})` : `BBOX(the_geom,${f.bbox.join(',')},'EPSG:4326')`]
   parts.push(`DATAFOTO >= '${f.years[0]}0000'`, `DATAFOTO <= '${f.years[1]}9999'`)
   if (f.scales.length) parts.push(`ESCALA IN (${f.scales.map(s => quote(String(s))).join(',')})`)
   return parts.join(' AND ')
@@ -62,8 +62,10 @@ function toPhoto(f: WfsFeature): Photo | null {
   }
 }
 
+// POST (form-encoded KVP): boundary polygons make filters too long for a URL.
+// This is a CORS "simple request", so no preflight is needed.
 async function getFeatures(params: Record<string, string>, signal?: AbortSignal) {
-  const qs = new URLSearchParams({
+  const body = new URLSearchParams({
     service: 'WFS',
     version: '1.1.0',
     request: 'GetFeature',
@@ -72,7 +74,7 @@ async function getFeatures(params: Record<string, string>, signal?: AbortSignal)
     srsname: 'EPSG:4326',
     ...params,
   })
-  const res = await fetch(`${WFS_URL}?${qs}`, { signal })
+  const res = await fetch(WFS_URL, { method: 'POST', body, signal })
   if (!res.ok) throw new Error(`WFS ${res.status}`)
   const data = await res.json() as WfsResponse
   const photos = data.features.map(toPhoto).filter((p): p is Photo => !!p)
@@ -87,6 +89,32 @@ export function fetchPhotos(filter: PhotoFilter, opts: { start?: number, count?:
     startIndex: String(opts.start ?? 0),
     sortBy: `DATAFOTO ${dir},NUMROLO A,NUMFIADA A,NUMFOTO A`,
   }, opts.signal)
+}
+
+/**
+ * Photo counts per year × scale inside an exact polygon. The legacy summary
+ * endpoint only understands bboxes, so for boundaries we count from the WFS.
+ */
+export async function fetchSummaryInPolygon(wkt: string, signal?: AbortSignal): Promise<YearScaleCount[]> {
+  const body = new URLSearchParams({
+    service: 'WFS', version: '1.1.0', request: 'GetFeature', typename: TYPE_NAME,
+    outputFormat: 'application/json', propertyName: 'DATAFOTO,ESCALA', maxFeatures: '100000',
+    CQL_FILTER: `INTERSECTS(the_geom, ${wkt})`,
+  })
+  const res = await fetch(WFS_URL, { method: 'POST', body, signal })
+  if (!res.ok) throw new Error(`WFS ${res.status}`)
+  const data = await res.json() as WfsResponse
+  const counts = new Map<string, YearScaleCount>()
+  for (const f of data.features) {
+    const { year } = parseDate(f.properties.DATAFOTO as string | null)
+    const scale = num(f.properties.ESCALA)
+    if (!year || !scale) continue
+    const k = `${year}|${scale}`
+    const c = counts.get(k)
+    if (c) c.count++
+    else counts.set(k, { year, scale, count: 1 })
+  }
+  return [...counts.values()].sort((a, b) => a.year - b.year || a.scale - b.scale)
 }
 
 /** Look up specific frames (for shared links and restoring overlays). */

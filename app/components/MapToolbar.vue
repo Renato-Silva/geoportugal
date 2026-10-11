@@ -47,7 +47,7 @@ const yearBtn = (active: boolean) => [
         <div class="px-3 pb-2 pt-2">
           <p class="text-xs font-medium text-ink-3">{{ t('basemap.ortos') }}</p>
           <p class="mb-2 text-[11px] text-ink-3/80">{{ t('basemap.ortosHint') }}</p>
-          <div class="grid grid-cols-3 gap-1">
+          <div class="grid grid-cols-4 gap-1">
             <button
               v-for="y in ORTHO_YEARS"
               :key="y"
@@ -56,12 +56,15 @@ const yearBtn = (active: boolean) => [
               :aria-pressed="store.basemap.value === `ortos${y}`"
               @click="store.basemap.value = `ortos${y}`"
             >
-              {{ y }}
+              <span :title="y === 2023 ? t('basemap.sat') : undefined">{{ y }}<sup v-if="y === 2023" class="ml-0.5 text-[9px] font-semibold opacity-70">SAT</sup></span>
             </button>
           </div>
         </div>
 
         <div class="my-1 border-t border-rule" />
+        <MenuItem icon="borders" :active="store.showBoundaries.value" @click="store.showBoundaries.value = !store.showBoundaries.value">
+          {{ t('map.boundaries') }}
+        </MenuItem>
         <MenuItem :icon="store.showFootprints.value ? 'eye' : 'eyeOff'" @click="store.showFootprints.value = !store.showFootprints.value">
           {{ t('map.footprints') }}
         </MenuItem>
@@ -93,9 +96,9 @@ const yearBtn = (active: boolean) => [
             <Icon name="chevronDown" :size="14" />
           </button>
         </template>
-        <div class="w-56 p-2">
+        <div class="w-64 p-2">
           <p class="mb-2 text-xs font-medium text-ink-3">{{ t('compare.year') }}</p>
-          <div class="grid grid-cols-3 gap-1">
+          <div class="grid grid-cols-4 gap-1">
             <button
               v-for="y in ORTHO_YEARS"
               :key="y"
@@ -104,7 +107,7 @@ const yearBtn = (active: boolean) => [
               :aria-pressed="store.compare.year === y"
               @click="store.compare.year = y"
             >
-              {{ y }}
+              <span :title="y === 2023 ? t('basemap.sat') : undefined">{{ y }}<sup v-if="y === 2023" class="ml-0.5 text-[9px] font-semibold opacity-70">SAT</sup></span>
             </button>
           </div>
         </div>

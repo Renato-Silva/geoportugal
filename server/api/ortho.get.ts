@@ -9,7 +9,14 @@ import { archived } from '../utils/archive'
  * through untouched (PNG) and kept in the archive after the first fetch.
  */
 // Years DGT publishes as a public WMS (1995, 2004 and 2025 exist only behind the CDD login).
-const YEARS = new Set(['2007', '2010', '2012', '2015', '2018', '2021'])
+// 2023 is the satellite orthomosaic (true colour), served from a different host.
+const SOURCES: Record<string, { url: string, layer: string }> = {
+  ...Object.fromEntries(['2007', '2010', '2012', '2015', '2018', '2021'].map(y => [y, {
+    url: `https://cartografia.dgterritorio.gov.pt/ortos${y}/service`,
+    layer: `DGT_Ortos${y}`,
+  }])),
+  2023: { url: 'https://ortos.dgterritorio.gov.pt/wms/ortosat2023', layer: 'ortoSat2023-CorVerdadeira' },
+}
 const HALF = 20037508.342789244
 
 function tileBbox(z: number, x: number, y: number) {
@@ -20,8 +27,9 @@ function tileBbox(z: number, x: number, y: number) {
 }
 
 async function fetchWms(year: string, bbox: number[], px: number): Promise<Buffer | null> {
-  const url = `https://cartografia.dgterritorio.gov.pt/ortos${year}/service?service=WMS&version=1.1.1&request=GetMap`
-    + `&layers=DGT_Ortos${year}&styles=&srs=EPSG:3857&bbox=${bbox.join(',')}&width=${px}&height=${px}&format=image/png`
+  const src = SOURCES[year]!
+  const url = `${src.url}?service=WMS&version=1.1.1&request=GetMap`
+    + `&layers=${src.layer}&styles=&srs=EPSG:3857&bbox=${bbox.join(',')}&width=${px}&height=${px}&format=image/png`
   const res = await fetch(url, { signal: AbortSignal.timeout(30_000) })
   // The WMS answers errors with HTTP 200 and an XML ServiceException
   if (!res.ok || !(res.headers.get('content-type') ?? '').startsWith('image/')) return null
@@ -32,7 +40,7 @@ export default defineEventHandler(async (event) => {
   const query = getQuery(event)
   const year = String(query.year ?? '')
   const [z, x, y] = [query.z, query.x, query.y].map(Number) as [number, number, number]
-  const valid = YEARS.has(year) && Number.isInteger(z) && Number.isInteger(x) && Number.isInteger(y)
+  const valid = year in SOURCES && Number.isInteger(z) && Number.isInteger(x) && Number.isInteger(y)
     && z >= 0 && z <= 20 && x >= 0 && y >= 0 && x < 2 ** z && y < 2 ** z
   if (!valid) throw createError({ statusCode: 400, statusMessage: 'year, z, x, y required' })
 

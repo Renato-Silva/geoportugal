@@ -1,12 +1,13 @@
 import type { Map as MlMap } from 'maplibre-gl'
-import type { Area, Bbox, Overlay, Photo, YearScaleCount } from '~/utils/types'
+import type { Area, Bbox, Boundary, Overlay, Photo, YearScaleCount } from '~/utils/types'
 import { YEAR_MAX, YEAR_MIN } from '~/utils/colors'
-import { fetchPhotos, fetchPhotosByUid } from '~/utils/wfs'
+import { fetchPhotos, fetchPhotosByUid, fetchSummaryInPolygon } from '~/utils/wfs'
 import { parseBbox, roundBbox } from '~/utils/geo'
 import { readStore, writeStore } from '~/utils/storage'
 
 /** Orthophoto years DGT publishes as a public WMS. */
-export const ORTHO_YEARS = [2007, 2010, 2012, 2015, 2018, 2021] as const
+/** Orthophoto years with a public WMS; 2023 is DGT's satellite orthomosaic. */
+export const ORTHO_YEARS = [2007, 2010, 2012, 2015, 2018, 2021, 2023] as const
 export type OrthoYear = typeof ORTHO_YEARS[number]
 export type BasemapId = 'map' | 'osm' | 'satellite' | `ortos${OrthoYear}`
 const BASEMAP_IDS: BasemapId[] = ['map', 'osm', 'satellite', ...ORTHO_YEARS.map(y => `ortos${y}` as const)]
@@ -24,6 +25,8 @@ const map = shallowRef<MlMap | null>(null)
 const tab = ref<Tab>('search')
 
 const area = shallowRef<Area | null>(null)
+/** Exact boundary of the current area, when it is an administrative unit */
+const boundary = shallowRef<Boundary | null>(null)
 const summary = shallowRef<YearScaleCount[]>([])
 const summaryState = ref<'idle' | 'loading' | 'ready' | 'error'>('idle')
 
@@ -40,6 +43,7 @@ const selected = ref<string[]>([])
 
 const overlays = ref<Overlay[]>([])
 const cleanEdges = ref(readStore('geoportugal:cleanEdges', true))
+const showBoundaries = ref(readStore('geoportugal:boundaries', false))
 const showFootprints = ref(true)
 const basemap = ref<BasemapId>('map')
 const compare = reactive({ enabled: false, position: 0.5, year: 2021 as OrthoYear })
@@ -55,6 +59,7 @@ watch(favs, v => writeStore('geoportugal:favs', v), { deep: true })
 watch(recentAreas, v => writeStore('geoportugal:recentAreas', v), { deep: true })
 watch(recentPhotos, v => writeStore('geoportugal:recentPhotos', v), { deep: true })
 watch(cleanEdges, v => writeStore('geoportugal:cleanEdges', v))
+watch(showBoundaries, v => writeStore('geoportugal:boundaries', v))
 
 // ---------------------------------------------------------------------------
 // Derived
@@ -94,15 +99,17 @@ const favUids = computed(() => new Set(favs.value.map(p => p.uid)))
 let summaryAbort: AbortController | null = null
 let photosAbort: AbortController | null = null
 
-async function loadSummary(bbox: Bbox) {
+async function loadSummary(bbox: Bbox, wkt?: string) {
   summaryAbort?.abort()
   const ctrl = summaryAbort = new AbortController()
   summaryState.value = 'loading'
   try {
-    const data = await $fetch<YearScaleCount[]>('/api/summary', {
-      query: { bbox: roundBbox(bbox).join(',') },
-      signal: ctrl.signal,
-    })
+    const data = wkt
+      ? await fetchSummaryInPolygon(wkt, ctrl.signal)
+      : await $fetch<YearScaleCount[]>('/api/summary', {
+          query: { bbox: roundBbox(bbox).join(',') },
+          signal: ctrl.signal,
+        })
     if (ctrl.signal.aborted) return
     summary.value = data
     summaryState.value = 'ready'
@@ -123,7 +130,7 @@ async function loadPhotos(more = false) {
   photosState.value = more ? 'more' : 'loading'
   try {
     const res = await fetchPhotos(
-      { bbox: a.bbox, years: years.value, scales: scales.value },
+      { bbox: a.bbox, wkt: boundary.value?.wkt, years: years.value, scales: scales.value },
       { start: more ? photos.value.length : 0, count: PAGE_SIZE, newestFirst: newestFirst.value, signal: ctrl.signal },
     )
     if (ctrl.signal.aborted) return
@@ -163,16 +170,36 @@ function fitBbox(b: Bbox, opts: { maxZoom?: number, animate?: boolean } = {}) {
 
 async function setArea(a: Area, opts: { keepFilters?: boolean, fit?: boolean } = {}) {
   area.value = a
+  boundary.value = null
   selected.value = []
   photos.value = []
   total.value = 0
   tab.value = 'search'
   mode.value = 'pan'
+
+  // Administrative units are searched inside their exact boundary.
+  if (a.admin) {
+    summaryAbort?.abort()
+    summaryState.value = 'loading'
+    try {
+      const b = await $fetch<Boundary>('/api/boundary', { query: a.admin })
+      if (area.value !== a) return
+      boundary.value = b
+      a = { ...a, bbox: b.bbox }
+      area.value = a
+    }
+    catch (e) {
+      console.error(e)
+      if (area.value === a) summaryState.value = 'error'
+      return
+    }
+  }
+
   if (a.kind !== 'view') {
     recentAreas.value = [a, ...recentAreas.value.filter(r => r.label !== a.label || r.bbox.join() !== a.bbox.join())].slice(0, MAX_RECENT)
   }
-  if (opts.fit ?? a.kind === 'place') fitBbox(a.bbox)
-  await loadSummary(a.bbox)
+  if (opts.fit ?? (a.kind === 'place' || a.kind === 'admin')) fitBbox(a.bbox)
+  await loadSummary(a.bbox, boundary.value?.wkt)
   if (area.value !== a) return
   if (!opts.keepFilters) {
     scales.value = []
@@ -187,6 +214,7 @@ function clearArea() {
   summaryAbort?.abort()
   photosAbort?.abort()
   area.value = null
+  boundary.value = null
   summary.value = []
   summaryState.value = 'idle'
   photos.value = []
@@ -273,13 +301,18 @@ function readUrl() {
   out.view = viewFromUrl()
   const bbox = parseBbox(q.get('bbox'))
   const kind = q.get('kind') as Area['kind'] | null
+  const [adminLevel, adminCode] = (q.get('admin') ?? '').split(':')
+  const admin = adminLevel && ['district', 'municipality', 'parish'].includes(adminLevel) && /^\d{2,6}$/.test(adminCode ?? '')
+    ? { level: adminLevel as 'district' | 'municipality' | 'parish', code: adminCode! }
+    : null
   if (bbox) {
     const pt = q.get('pt')?.split(',').map(Number)
     out.area = {
-      kind: kind && ['place', 'view', 'box', 'point'].includes(kind) ? kind : 'box',
+      kind: kind && ['place', 'admin', 'view', 'box', 'point'].includes(kind) ? kind : 'box',
       label: q.get('area') ?? '',
       bbox,
       ...(pt?.length === 2 && pt.every(Number.isFinite) ? { point: pt as [number, number] } : {}),
+      ...(admin ? { admin } : {}),
     }
   }
   const y = q.get('years')?.split('-').map(Number)
@@ -306,6 +339,7 @@ function buildUrl(includeView = true) {
     q.set('area', a.label)
     q.set('bbox', roundBbox(a.bbox).join(','))
     if (a.point) q.set('pt', a.point.map(n => n.toFixed(5)).join(','))
+    if (a.admin) q.set('admin', `${a.admin.level}:${a.admin.code}`)
     const dy = dataYears.value
     if (!dy || years.value[0] !== dy[0] || years.value[1] !== dy[1]) q.set('years', years.value.join('-'))
     if (scales.value.length) q.set('scales', scales.value.join(','))
@@ -356,7 +390,7 @@ async function restoreFromUrl() {
 export function useFototeca() {
   return {
     // state
-    map, tab, area, summary, summaryState, years, scales, newestFirst,
+    map, tab, area, boundary, showBoundaries, summary, summaryState, years, scales, newestFirst,
     photos, total, photosState, hovered, selected, overlays, cleanEdges, showFootprints,
     basemap, compare, mode, viewer, favs, recentAreas, recentPhotos, view,
     // derived
