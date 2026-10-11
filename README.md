@@ -121,4 +121,9 @@ NUXT_S3_ACCESS_KEY_ID=…
 NUXT_S3_SECRET_ACCESS_KEY=…
 ```
 
+## Password protection
+
+Set `NUXT_SITE_PASSWORD` to require a password (HTTP Basic auth, any username) for the
+app and its API. Leave it unset for public access.
+
 Photos © DGT — Direção-Geral do Território.

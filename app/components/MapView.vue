@@ -50,6 +50,11 @@ const BASEMAP_SOURCES: Record<string, StyleSpecification['sources'][string]> = {
     tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
     attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
   },
+  'bm-carta25k': {
+    type: 'raster', tileSize: 256, minzoom: 7, maxzoom: 18, bounds: [-9.7, 36.9, -6.1, 42.3],
+    tiles: [`${location.origin}/api/carta25k?z={z}&x={x}&y={y}`],
+    attribution: 'Carta Militar 1:25 000 © CIGeoE',
+  },
   'bm-itineraria': {
     type: 'raster', tileSize: 256, minzoom: 5, maxzoom: 13, bounds: [-10.2, 36.85, -6.05, 42.25],
     tiles: [`${location.origin}/api/itineraria?z={z}&x={x}&y={y}`],
@@ -91,7 +96,7 @@ const LABEL_SOURCES: Record<string, StyleSpecification['sources'][string]> = {
 }
 
 /** Place-name labels drawn above the photos, so overlays never hide where you are. */
-const labelLayerId = () => store.basemap.value === 'osm' || store.basemap.value === 'itineraria' ? null : (isDark.value || store.basemap.value === 'satellite' || store.basemap.value.startsWith('ortos')) ? 'lb-dark' : 'lb-light'
+const labelLayerId = () => ['osm', 'itineraria', 'carta25k'].includes(store.basemap.value) ? null : (isDark.value || store.basemap.value === 'satellite' || store.basemap.value.startsWith('ortos')) ? 'lb-dark' : 'lb-light'
 
 const basemapLayerId = (b: BasemapId) => b === 'map' ? (isDark.value ? 'bm-dark' : 'bm-light') : `bm-${b}`
 

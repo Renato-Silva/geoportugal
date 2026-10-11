@@ -9,8 +9,8 @@ import { readStore, writeStore } from '~/utils/storage'
 /** Orthophoto years with a public WMS; 2023 is DGT's satellite orthomosaic. */
 export const ORTHO_YEARS = [2007, 2010, 2012, 2015, 2018, 2021, 2023] as const
 export type OrthoYear = typeof ORTHO_YEARS[number]
-export type BasemapId = 'map' | 'osm' | 'satellite' | 'itineraria' | `ortos${OrthoYear}`
-const BASEMAP_IDS: BasemapId[] = ['map', 'osm', 'satellite', 'itineraria', ...ORTHO_YEARS.map(y => `ortos${y}` as const)]
+export type BasemapId = 'map' | 'osm' | 'satellite' | 'itineraria' | 'carta25k' | `ortos${OrthoYear}`
+const BASEMAP_IDS: BasemapId[] = ['map', 'osm', 'satellite', 'itineraria', 'carta25k', ...ORTHO_YEARS.map(y => `ortos${y}` as const)]
 export type MapMode = 'pan' | 'box' | 'point'
 export type Tab = 'search' | 'map' | 'saved'
 

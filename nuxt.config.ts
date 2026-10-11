@@ -31,12 +31,28 @@ export default defineNuxtConfig({
     // Optional S3-compatible storage for fetched imagery (NUXT_S3_BUCKET, NUXT_S3_REGION, …).
     // When empty, imagery is stored on local disk in archiveDir (NUXT_ARCHIVE_DIR).
     archiveDir: '.data/archive',
+    // Password-protects the whole site (HTTP Basic auth) when set (NUXT_SITE_PASSWORD).
+    sitePassword: '',
     s3: {
       bucket: '',
       region: '',
       endpoint: '',
       accessKeyId: '',
       secretAccessKey: '',
+    },
+    // Licensed Carta Militar 1:25 000 tiles (CIGeoE). Configure once you hold a licence:
+    //   NUXT_CARTA_MILITAR_URL  — tile template, with {z}/{x}/{y} and optionally {token}
+    //       e.g. https://…/WMTS/tile/1.0.0/mobile_25k/default/GoogleMapsCompatible/{z}/{y}/{x}?token={token}
+    //   NUXT_CARTA_MILITAR_TOKEN   — the key/token (kept server-side; never sent to the browser)
+    //   NUXT_CARTA_MILITAR_HEADER  — optional "Name: value" header for auth instead of a {token} in the URL
+    cartaMilitar: {
+      url: '',
+      token: '',
+      header: '',
+    },
+    public: {
+      // Set NUXT_PUBLIC_CARTA_MILITAR_ENABLED=true to show the basemap once licensed.
+      cartaMilitarEnabled: false,
     },
   },
 })

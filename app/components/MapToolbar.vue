@@ -4,12 +4,14 @@ import { ORTHO_YEARS, type BasemapId } from '~/composables/useFototeca'
 const emit = defineEmits<{ exportPng: [] }>()
 const store = useFototeca()
 const { t } = useI18n()
+const cartaMilitarEnabled = useRuntimeConfig().public.cartaMilitarEnabled as boolean
 
 const basemaps = computed<{ id: BasemapId, label: string, swatch: string }[]>(() => [
   { id: 'map', label: t('basemap.map'), swatch: 'linear-gradient(135deg,#f4f5f7,#d9dde3)' },
   { id: 'osm', label: t('basemap.osm'), swatch: 'linear-gradient(135deg,#f2efe9,#aad3df 60%,#c8e6a0)' },
   { id: 'satellite', label: t('basemap.satellite'), swatch: 'linear-gradient(135deg,#3c4a2c,#6b6a4b 50%,#24323d)' },
   { id: 'itineraria', label: t('basemap.itineraria'), swatch: 'linear-gradient(135deg,#f3eedc,#e8c27a 40%,#d9534f 55%,#9fc59a)' },
+  ...(cartaMilitarEnabled ? [{ id: 'carta25k' as const, label: t('basemap.carta25k'), swatch: 'linear-gradient(135deg,#efe9d8,#b9ae53 45%,#6b6a3a 55%,#c9c3a0)' }] : []),
 ])
 
 const currentLabel = computed(() => {
