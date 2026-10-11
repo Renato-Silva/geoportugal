@@ -123,7 +123,7 @@ NUXT_S3_SECRET_ACCESS_KEY=…
 
 ## Password protection
 
-Set `NUXT_SITE_PASSWORD` to require a password (HTTP Basic auth, any username) for the
-app and its API. Leave it unset for public access.
+Set `NUXT_SITE_PASSWORD` to require a password (login page at `/login`, 30-day session cookie)
+for the app and its API. Leave it unset for public access. Changing the password signs everyone out.
 
 Photos © DGT — Direção-Geral do Território.
