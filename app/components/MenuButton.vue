@@ -26,7 +26,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onDoc))
     </slot>
     <div
       v-if="open"
-      class="rise absolute z-40 min-w-52 rounded-xl border border-rule bg-card p-1 shadow-panel"
+      class="rise scroll-thin absolute z-40 max-h-[calc(100dvh-6rem)] min-w-52 overflow-y-auto rounded-xl border border-rule bg-card p-1 shadow-panel"
       :class="[align === 'left' ? 'left-0' : 'right-0', up ? 'bottom-full mb-1.5' : 'top-full mt-1.5']"
       role="menu"
       @click="open = false"

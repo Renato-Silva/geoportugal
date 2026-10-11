@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import {
   AttributionControl, GeolocateControl, Map as MlMap, NavigationControl, ScaleControl,
-  setWorkerUrl, type GeoJSONSource, type ImageSource, type MapMouseEvent, type MapTouchEvent, type StyleSpecification,
+  setWorkerUrl, type GeoJSONSource, type ImageSource, type MapMouseEvent, type MapTouchEvent, type RasterTileSource, type StyleSpecification,
 } from 'maplibre-gl'
 // MapLibre builds its worker URL at runtime, so Vite never emits the file; ship it as an asset instead.
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url'
@@ -13,6 +13,7 @@ import { DECADES } from '~/composables/useCoverage'
 import { photoUrl } from '~/utils/photoUrl'
 import { saveBlob } from '~/utils/exporters'
 import { ORTHO_YEARS, type BasemapId } from '~/composables/useFototeca'
+import type { ThematicId } from '#shared/thematic'
 
 setWorkerUrl(workerUrl)
 
@@ -32,7 +33,8 @@ let compareMap: MlMap | null = null
 // ---------------------------------------------------------------------------
 const PT_MAINLAND: [number, number, number, number] = [-9.7, 36.8, -6.0, 42.3]
 // Proxied: the WMS sends a duplicated CORS header that browsers reject.
-const dgtWms = (year: number) => `${location.origin}/api/ortho?year=${year}&z={z}&x={x}&y={y}`
+// v=2: 1995/2014 tiles were first served blank at low zoom; skip any browser-cached copies
+const dgtWms = (year: number) => `${location.origin}/api/ortho?year=${year}&z={z}&x={x}&y={y}${year === 1995 || year === 2014 ? '&v=2' : ''}`
 
 const BASEMAP_SOURCES: Record<string, StyleSpecification['sources'][string]> = {
   'bm-light': {
@@ -65,12 +67,16 @@ const BASEMAP_SOURCES: Record<string, StyleSpecification['sources'][string]> = {
     tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
     attribution: 'Imagery © Esri, Maxar, Earthstar Geographics',
   },
+  // 1995 and 2014–15 are rendered server-side from a larger fetch below z14 (see server/utils/ortho.ts)
   ...Object.fromEntries(ORTHO_YEARS.map(year => [`bm-ortos${year}`, {
-    type: 'raster' as const, tileSize: 256, minzoom: 10, maxzoom: 20, bounds: PT_MAINLAND,
+    type: 'raster' as const, tileSize: 256, minzoom: year === 1995 || year === 2014 ? 12 : 10, maxzoom: 20, bounds: PT_MAINLAND,
     tiles: [dgtWms(year)],
-    attribution: `Ortofotos ${year} © DGT`,
+    attribution: `Ortofotos ${year === 2014 ? '2014–15' : year} © DGT`,
   }])),
 }
+
+/** Thematic overlay (MAF / COS): one source whose tiles are swapped per map. Proxied and archived. */
+const thematicTiles = (id: ThematicId) => [`${location.origin}/api/thematic?id=${id}&z={z}&x={x}&y={y}`]
 
 const caopWms = (ws: string, layer: string) =>
   `https://geo2.dgterritorio.gov.pt/geoserver/${ws}/wms?service=WMS&version=1.1.1&request=GetMap&layers=${layer}`
@@ -130,6 +136,11 @@ function buildStyle(): StyleSpecification {
       ...BASEMAP_SOURCES,
       ...LABEL_SOURCES,
       ...BOUNDARY_SOURCES,
+      thematic: {
+        type: 'raster', tileSize: 256, minzoom: 6, maxzoom: 16, bounds: PT_MAINLAND,
+        tiles: thematicTiles(store.thematic.value ?? 'maf'),
+        attribution: 'MAF / COS © DGT',
+      },
       area: { type: 'geojson', data: emptyFC },
       coverage: { type: 'geojson', data: emptyFC },
       sheets: { type: 'geojson', data: emptyFC },
@@ -154,7 +165,12 @@ function buildStyle(): StyleSpecification {
           'fill-antialias': false,
         },
       },
-      // photo overlays are inserted here, below the labels
+      // photo overlays are inserted here, below the thematic map and the labels
+      {
+        id: 'thematic', type: 'raster', source: 'thematic',
+        layout: { visibility: store.thematic.value ? 'visible' : 'none' },
+        paint: { 'raster-opacity': store.thematicOpacity.value, 'raster-fade-duration': 150 },
+      },
       ...Object.keys(LABEL_SOURCES).map(id => ({
         id, type: 'raster' as const, source: id,
         layout: { visibility: (id === labelLayerId() ? 'visible' : 'none') as 'visible' | 'none' },
@@ -342,7 +358,7 @@ const overlayLayerId = (uid: string) => `ov-${uid}`
 let shownOverlays = new Map<string, string>() // uid → image url
 
 function syncOverlays() {
-  if (!map?.getLayer('lb-light')) return
+  if (!map?.getLayer('thematic')) return
   const wanted = store.overlays.value
   const wantedIds = new Set(wanted.map(o => o.photo.uid))
   for (const uid of [...shownOverlays.keys()]) {
@@ -360,7 +376,7 @@ function syncOverlays() {
       map.addLayer({
         id, type: 'raster', source: id,
         paint: { 'raster-opacity': o.opacity, 'raster-fade-duration': 0, 'raster-resampling': 'linear' },
-      }, 'lb-light')
+      }, 'thematic')
       shownOverlays.set(o.photo.uid, url)
     }
     else if (shownOverlays.get(o.photo.uid) !== url) {
@@ -371,7 +387,7 @@ function syncOverlays() {
     map.setLayoutProperty(id, 'visibility', o.visible ? 'visible' : 'none')
   }
   // keep stacking order = list order (last on top)
-  for (const o of wanted) map.moveLayer(overlayLayerId(o.photo.uid), 'lb-light')
+  for (const o of wanted) map.moveLayer(overlayLayerId(o.photo.uid), 'thematic')
 }
 
 watch(store.photos, syncFootprints)
@@ -393,6 +409,12 @@ watch(store.showSheets, async (show) => {
     src<GeoJSONSource>('sheets')?.setData(sheets.geojson.value ?? emptyFC)
   }
 }, { immediate: false })
+watch(store.thematic, (id) => {
+  if (!map?.getLayer('thematic')) return
+  if (id) src<RasterTileSource>('thematic')?.setTiles(thematicTiles(id))
+  map.setLayoutProperty('thematic', 'visibility', id ? 'visible' : 'none')
+})
+watch(store.thematicOpacity, v => map?.getLayer('thematic') && map.setPaintProperty('thematic', 'raster-opacity', v))
 watch(store.showCoverage, show => map?.setLayoutProperty('coverage-fill', 'visibility', show ? 'visible' : 'none'))
 watch(store.showFootprints, (show) => {
   for (const id of ['footprints-fill', 'footprints-line']) map?.setLayoutProperty(id, 'visibility', show ? 'visible' : 'none')

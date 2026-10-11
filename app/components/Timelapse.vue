@@ -123,7 +123,7 @@ function title(f: Frame) {
   return f.kind === 'ortho' ? String(f.year) : formatDate(f.date, lang.value)
 }
 function subtitle(f: Frame) {
-  if (f.kind === 'ortho') return f.year === 2023 ? t('tl.sat') : t('tl.ortho')
+  if (f.kind === 'ortho') return f.year === 2023 ? t('tl.sat') : f.year === 1995 ? t('tl.ir') : t('tl.ortho')
   const p = f.photo!
   return `${t('tl.photo')} · ${formatScale(p.scale, lang.value)} · ${t('results.flight', { rolo: p.rolo })}`
 }

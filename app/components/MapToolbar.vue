@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ORTHO_YEARS, type BasemapId } from '~/composables/useFototeca'
+import { ORTHO_YEARS, type BasemapId, type OrthoYear } from '~/composables/useFototeca'
+import { COS_IDS, THEMATIC_LAYERS, thematicLegendUrl } from '#shared/thematic'
 
 const emit = defineEmits<{ exportPng: [] }>()
 const store = useFototeca()
@@ -19,6 +20,14 @@ const currentLabel = computed(() => {
   return b.startsWith('ortos') ? `${t('basemap.ortos')} ${b.slice(5)}` : basemaps.value.find(x => x.id === b)?.label
 })
 
+/** Small corner badge and tooltip for the orthophoto years that are not plain colour. */
+const yearBadge = (y: OrthoYear) => y === 2023 ? 'sat' : y === 1995 ? t('basemap.irBadge') : y === 2014 ? t('basemap.coastBadge') : null
+const yearTitle = (y: OrthoYear) => y === 2023 ? t('basemap.sat') : y === 1995 ? t('basemap.ir') : y === 2014 ? t('basemap.coast') : undefined
+
+const toggleThematic = (id: typeof store.thematic.value) => {
+  store.thematic.value = store.thematic.value === id ? null : id
+}
+
 const yearBtn = (active: boolean) => [
   'relative rounded-lg border py-1.5 text-[13px] font-medium tabular-nums transition',
   active ? 'border-accent bg-accent text-accent-ink' : 'border-rule bg-card text-ink-2 hover:border-ink-3 hover:text-ink',
@@ -27,7 +36,8 @@ const yearBtn = (active: boolean) => [
 
 <template>
   <div class="pointer-events-auto flex flex-col items-end gap-2">
-    <div class="flex rounded-xl border border-rule bg-glass shadow-panel backdrop-blur-xl">
+    <!-- z-10: keeps the open menu above the thematic card below -->
+    <div class="relative z-10 flex rounded-xl border border-rule bg-glass shadow-panel backdrop-blur-xl">
       <MenuButton label="" align="right">
         <template #trigger="{ toggle, open }">
           <button
@@ -57,14 +67,37 @@ const yearBtn = (active: boolean) => [
               type="button"
               :class="yearBtn(store.basemap.value === `ortos${y}`)"
               :aria-pressed="store.basemap.value === `ortos${y}`"
-              :title="y === 2023 ? t('basemap.sat') : undefined"
+              :title="yearTitle(y)"
               @click="store.basemap.value = `ortos${y}`"
             >
               {{ y }}
               <span
-                v-if="y === 2023"
+                v-if="yearBadge(y)"
                 class="absolute -top-1.5 right-1 rounded-full border border-rule bg-card px-1 text-[8.5px] font-semibold uppercase leading-[13px] tracking-wide text-ink-3"
-              >sat</span>
+              >{{ yearBadge(y) }}</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="border-t border-rule px-3 pb-2 pt-2">
+          <p class="text-xs font-medium text-ink-3">{{ t('thematic.title') }}</p>
+          <p class="mb-2 text-[11px] text-ink-3/80">{{ t('thematic.hint') }}</p>
+          <p class="mb-1 text-[11px] text-ink-2">{{ t('thematic.maf') }}</p>
+          <div class="mb-2 grid grid-cols-4 gap-1">
+            <button
+              type="button" class="col-span-2" :class="yearBtn(store.thematic.value === 'maf')"
+              :aria-pressed="store.thematic.value === 'maf'" @click="toggleThematic('maf')"
+            >
+              {{ THEMATIC_LAYERS.maf.label }}
+            </button>
+          </div>
+          <p class="mb-1 text-[11px] text-ink-2">{{ t('thematic.cos') }}</p>
+          <div class="grid grid-cols-4 gap-1">
+            <button
+              v-for="id in COS_IDS" :key="id" type="button" :class="yearBtn(store.thematic.value === id)"
+              :aria-pressed="store.thematic.value === id" @click="toggleThematic(id)"
+            >
+              {{ THEMATIC_LAYERS[id].label }}
             </button>
           </div>
         </div>
@@ -119,18 +152,44 @@ const yearBtn = (active: boolean) => [
               type="button"
               :class="yearBtn(store.compare.year === y)"
               :aria-pressed="store.compare.year === y"
-              :title="y === 2023 ? t('basemap.sat') : undefined"
+              :title="yearTitle(y)"
               @click="store.compare.year = y"
             >
               {{ y }}
               <span
-                v-if="y === 2023"
+                v-if="yearBadge(y)"
                 class="absolute -top-1.5 right-1 rounded-full border border-rule bg-card px-1 text-[8.5px] font-semibold uppercase leading-[13px] tracking-wide text-ink-3"
-              >sat</span>
+              >{{ yearBadge(y) }}</span>
             </button>
           </div>
         </div>
       </MenuButton>
+    </div>
+
+    <!-- Active thematic overlay: opacity, legend, remove -->
+    <div v-if="store.thematic.value" class="w-64 rounded-xl border border-rule bg-glass px-3 py-2.5 shadow-panel backdrop-blur-xl">
+      <div class="flex items-center justify-between gap-2">
+        <div class="min-w-0">
+          <p class="truncate text-[11px] text-ink-3">{{ store.thematic.value === 'maf' ? t('thematic.maf') : t('thematic.cos') }}</p>
+          <p class="text-[13px] font-medium tabular-nums">{{ THEMATIC_LAYERS[store.thematic.value].label }}</p>
+        </div>
+        <div class="flex shrink-0 items-center">
+          <a
+            :href="thematicLegendUrl(store.thematic.value)" target="_blank" rel="noopener"
+            class="rounded-md px-1.5 py-0.5 text-xs text-ink-3 hover:text-accent"
+          >{{ t('thematic.legend') }}</a>
+          <button
+            type="button" class="grid size-6 place-items-center rounded-md text-ink-3 hover:bg-paper-2 hover:text-ink"
+            :aria-label="t('thematic.off')" :title="t('thematic.off')" @click="store.thematic.value = null"
+          >
+            <Icon name="close" :size="14" />
+          </button>
+        </div>
+      </div>
+      <input
+        v-model.number="store.thematicOpacity.value" type="range" class="range mt-1.5" min="0.1" max="1" step="0.05"
+        :style="{ '--pct': `${((store.thematicOpacity.value - 0.1) / 0.9) * 100}%` }" :aria-label="t('thematic.opacity')"
+      >
     </div>
   </div>
 </template>

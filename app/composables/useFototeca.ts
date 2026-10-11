@@ -4,10 +4,13 @@ import { YEAR_MAX, YEAR_MIN } from '~/utils/colors'
 import { fetchPhotos, fetchPhotosByUid, fetchSummaryInPolygon } from '~/utils/wfs'
 import { parseBbox, roundBbox } from '~/utils/geo'
 import { readStore, writeStore } from '~/utils/storage'
+import { isThematicId, type ThematicId } from '#shared/thematic'
 
-/** Orthophoto years DGT publishes as a public WMS. */
-/** Orthophoto years with a public WMS; 2023 is DGT's satellite orthomosaic. */
-export const ORTHO_YEARS = [2007, 2010, 2012, 2015, 2018, 2021, 2023] as const
+/**
+ * Orthophoto years with a public WMS. 1995 is colour-infrared only, 2014 is the
+ * 2014–15 coastal strip, and 2023 is DGT's satellite orthomosaic.
+ */
+export const ORTHO_YEARS = [1995, 2007, 2010, 2012, 2014, 2015, 2018, 2021, 2023] as const
 export type OrthoYear = typeof ORTHO_YEARS[number]
 export type BasemapId = 'map' | 'osm' | 'satellite' | 'itineraria' | 'carta25k' | `ortos${OrthoYear}`
 const BASEMAP_IDS: BasemapId[] = ['map', 'osm', 'satellite', 'itineraria', 'carta25k', ...ORTHO_YEARS.map(y => `ortos${y}` as const)]
@@ -48,6 +51,9 @@ const showCoverage = ref(readStore('geoportugal:coverage', true))
 const showSheets = ref(readStore('geoportugal:sheets', false))
 const showFootprints = ref(true)
 const basemap = ref<BasemapId>('map')
+/** Thematic map laid over the photos (MAF 1951–80 or a COS land-use year) */
+const thematic = ref<ThematicId | null>(null)
+const thematicOpacity = ref(readStore('geoportugal:thematicOpacity', 0.6))
 const compare = reactive({ enabled: false, position: 0.5, year: 2021 as OrthoYear })
 const mode = ref<MapMode>('pan')
 
@@ -66,6 +72,7 @@ watch(cleanEdges, v => writeStore('geoportugal:cleanEdges', v))
 watch(showBoundaries, v => writeStore('geoportugal:boundaries', v))
 watch(showCoverage, v => writeStore('geoportugal:coverage', v))
 watch(showSheets, v => writeStore('geoportugal:sheets', v))
+watch(thematicOpacity, v => writeStore('geoportugal:thematicOpacity', v))
 
 // ---------------------------------------------------------------------------
 // Derived
@@ -331,6 +338,8 @@ function readUrl() {
   out.overlays = (q.get('on') ?? '').split(',').filter(Boolean)
   const bm = q.get('base') as BasemapId | null
   if (bm && BASEMAP_IDS.includes(bm)) basemap.value = bm
+  const th = q.get('th')
+  if (isThematicId(th)) thematic.value = th
   if (q.get('compare') === '1') compare.enabled = true
   const cy = Number(q.get('cy'))
   if ((ORTHO_YEARS as readonly number[]).includes(cy)) compare.year = cy as OrthoYear
@@ -356,6 +365,7 @@ function buildUrl(includeView = true) {
   }
   if (overlays.value.length) q.set('on', overlays.value.map(o => o.photo.uid).join(','))
   if (basemap.value !== 'map') q.set('base', basemap.value)
+  if (thematic.value) q.set('th', thematic.value)
   if (compare.enabled) q.set('compare', '1')
   if (compare.enabled && compare.year !== 2021) q.set('cy', String(compare.year))
   const v = viewer.value?.list[viewer.value.index]
@@ -377,7 +387,7 @@ async function restoreFromUrl() {
   restored = true
   const s = readUrl()
   if (s.view) view.value = s.view
-  watch([view, area, years, scales, overlays, basemap, () => compare.enabled, () => compare.year, viewer, timelapse], scheduleUrlWrite, { deep: true })
+  watch([view, area, years, scales, overlays, basemap, thematic, () => compare.enabled, () => compare.year, viewer, timelapse], scheduleUrlWrite, { deep: true })
 
   const tasks: Promise<unknown>[] = []
   if (s.area) {
@@ -405,7 +415,7 @@ export function useFototeca() {
     // state
     map, tab, area, boundary, showBoundaries, showCoverage, showSheets, summary, summaryState, years, scales, newestFirst,
     photos, total, photosState, hovered, selected, overlays, cleanEdges, showFootprints,
-    basemap, compare, mode, viewer, timelapse, openTimelapse, favs, recentAreas, recentPhotos, view,
+    basemap, thematic, thematicOpacity, compare, mode, viewer, timelapse, openTimelapse, favs, recentAreas, recentPhotos, view,
     // derived
     dataYears, yearCounts, scaleCounts, overlayUids, favUids,
     // actions

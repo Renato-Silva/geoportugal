@@ -12,8 +12,11 @@ export interface Frame {
   orthoYear?: number
 }
 
-/** Orthophoto years shown at the end of every time-lapse (DGT WMS; 2023 = satellite). */
-export const TIMELAPSE_ORTHO_YEARS = [2007, 2010, 2012, 2015, 2018, 2021, 2023]
+/**
+ * Orthophoto years added to every mainland time-lapse (DGT WMS; 1995 = infrared,
+ * 2023 = satellite). The 2014–15 coastal set is left out: most points fall outside it.
+ */
+export const TIMELAPSE_ORTHO_YEARS = [1995, 2007, 2010, 2012, 2015, 2018, 2021, 2023]
 
 // Orthophotos only cover mainland Portugal
 const inMainland = ([lon, lat]: [number, number]) => lon > -9.7 && lon < -6 && lat > 36.8 && lat < 42.3
@@ -48,12 +51,12 @@ export async function buildFrames(point: [number, number], signal?: AbortSignal)
   }
   const frames: Frame[] = [...best.values()]
     .map(({ photo }) => ({ id: photo.uid, kind: 'photo' as const, year: photo.year!, date: photo.date!, photo }))
-    .sort((a, b) => a.date.localeCompare(b.date))
   if (inMainland(point)) {
     for (const y of TIMELAPSE_ORTHO_YEARS)
       frames.push({ id: `ortho-${y}`, kind: 'ortho', year: y, date: String(y), orthoYear: y })
   }
-  return frames
+  // 1995 sits among the later flights; within a year, flights come first
+  return frames.sort((a, b) => a.year - b.year || +(a.kind === 'ortho') - +(b.kind === 'ortho') || a.date.localeCompare(b.date))
 }
 
 export function frameUrl(f: Frame, point: [number, number], m: number, px = 512) {
