@@ -47,6 +47,13 @@ The image runs as a non-root user.
 
 ## Features
 
+- **Coverage map**: a country-wide grid of where the archive has photos, filterable by decade, with a
+  "photos in this view" panel; click a cell to search it (data: `public/data/coverage.json`, see below)
+- **This spot through time**: right-click anywhere (or search a point/place) for a time-lapse of every
+  flight that photographed it, followed by the 2007–2023 orthophotos, at 300 m – 2.5 km
+- **GIS downloads**: every PNG comes with a world file (`.pgw`), `.prj` and `.aux.xml` (EPSG:3857), and
+  flights / selections / on-map photos can be exported as one georeferenced mosaic
+
 - Search by **district / municipality / parish**, searched by the **exact boundary** (CAOP), not a rectangle
 - Gazetteer place search (accent/typo tolerant: villages, landforms…), plus **map view**, **drawn box** or **clicked point**
 - **Coverage timeline**: photos per year for the area, drag to filter a year range
@@ -77,6 +84,22 @@ The image runs as a non-root user.
 
 The geo5 endpoints and the orthophoto WMS can't be called from the browser:
 geo5 sends no CORS headers, and the WMS sends a duplicated one.
+
+## Coverage data
+
+`public/data/coverage.json` is a pre-aggregated snapshot (≈160 KB gzipped) of all footprints:
+2.5 km Web Mercator cells with photo counts per decade. Rebuild it when the archive changes:
+
+```sh
+npm run build:coverage   # ~25 sequential WFS requests, about a minute
+```
+
+## Georeferencing
+
+Photos are placed by their footprint's bounding box, stretched linearly in Web Mercator
+(the same way the map draws them). They are **not orthorectified**: expect offsets of tens of
+metres, more in steep terrain. This applies to the map overlays, time-lapse crops, world files
+and mosaics alike.
 
 ## Image storage
 

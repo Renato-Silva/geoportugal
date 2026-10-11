@@ -2,6 +2,7 @@ import JSZip from 'jszip'
 import type { Photo } from '~/utils/types'
 import { photoUrl } from '~/utils/photoUrl'
 import { saveBlob, toCSV, toGeoJSON, toKML } from '~/utils/exporters'
+import { GEOREF_README_PT, pngSize, sidecars, worldFileForBbox } from '#shared/georef'
 
 const MAX_ZIP = 100
 
@@ -26,7 +27,12 @@ export function useDownloads() {
         try {
           const res = await fetch(photoUrl(p, 'original'))
           if (!res.ok) throw new Error(String(res.status))
-          zip.file(`${p.rolo.replace(/[^\w]+/g, '-')}_${p.foto}.png`, await res.blob())
+          // Every PNG ships with a world file + CRS so GIS software places it.
+          const buf = await res.arrayBuffer()
+          const base = `${p.rolo.replace(/[^\w]+/g, '-')}_${p.foto}`
+          zip.file(`${base}.png`, buf)
+          const size = pngSize(buf)
+          if (size) for (const [file, text] of Object.entries(sidecars(base, worldFileForBbox(p.bbox, size.width, size.height)))) zip.file(file, text)
         }
         catch {
           failed++
@@ -38,11 +44,42 @@ export function useDownloads() {
     await Promise.all([worker(), worker(), worker()])
     zip.file('metadados.csv', toCSV(photos))
     zip.file('molduras.geojson', toGeoJSON(photos))
-    zip.file('LEIA-ME.txt', `${t('credit')}\nhttps://geo5.dgterritorio.gov.pt/fototeca/\n`)
+    zip.file('LEIA-ME.txt', `${GEOREF_README_PT}\n${t('credit')}\nhttps://geo5.dgterritorio.gov.pt/fototeca/\n`)
     const blob = await zip.generateAsync({ type: 'blob' })
     toast.dismiss(id)
     saveBlob(blob, `${name}.zip`)
     toast.show(failed ? `${t('toast.zipDone')} (${failed} ✕)` : t('toast.zipDone'), { tone: failed ? 'error' : 'info' })
+  }
+
+  /** One photo as a georeferenced ZIP (PNG + world file + CRS). */
+  function downloadGeoref(photo: Photo) {
+    return downloadZip([photo], `geoportugal_${photo.rolo.replace(/[^\w]+/g, '-')}_${photo.foto}`)
+  }
+
+  /** Server-side mosaic of several photos as one georeferenced PNG. */
+  async function downloadMosaic(photos: Photo[], name = 'geoportugal_mosaico') {
+    if (!photos.length) return
+    if (photos.length > 60) {
+      toast.show(t('toast.tooMany', { n: 60 }), { tone: 'error' })
+      return
+    }
+    const id = toast.show(t('toast.mosaic', { n: photos.length }), { sticky: true })
+    try {
+      const blob = await $fetch<Blob>('/api/mosaic', {
+        method: 'POST',
+        body: { name, photos: photos.map(p => ({ rolo: p.rolo, foto: p.foto, bbox: p.bbox })) },
+        responseType: 'blob',
+        timeout: 180_000,
+      })
+      saveBlob(blob, `${name}.zip`)
+      toast.dismiss(id)
+      toast.show(t('toast.zipDone'))
+    }
+    catch (e) {
+      console.error(e)
+      toast.dismiss(id)
+      toast.show(t('toast.loadFail'), { tone: 'error' })
+    }
   }
 
   function exportFile(kind: 'geojson' | 'kml' | 'csv', photos: Photo[], name = 'geoportugal') {
@@ -69,5 +106,5 @@ export function useDownloads() {
     }
   }
 
-  return { downloadZip, exportFile, copyLink }
+  return { downloadZip, downloadGeoref, downloadMosaic, exportFile, copyLink }
 }

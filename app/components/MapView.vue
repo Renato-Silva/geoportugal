@@ -7,12 +7,14 @@ import type { Bbox, Photo, PhotoLocation } from '~/utils/types'
 import { bboxCorners, bboxPolygon, pointBbox } from '~/utils/geo'
 import { yearColorExpression } from '~/utils/colors'
 import { photosAsGeoJSON } from '~/utils/wfs'
+import { DECADES } from '~/composables/useCoverage'
 import { photoUrl } from '~/utils/photoUrl'
 import { saveBlob } from '~/utils/exporters'
 import { ORTHO_YEARS, type BasemapId } from '~/composables/useFototeca'
 
 const store = useFototeca()
-const { t } = useI18n()
+const coverage = useCoverage()
+const { t, lang } = useI18n()
 const { isDark } = useTheme()
 
 const el = ref<HTMLDivElement>()
@@ -86,6 +88,16 @@ const basemapLayerId = (b: BasemapId) => b === 'map' ? (isDark.value ? 'bm-dark'
 
 const emptyFC: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] }
 
+/** Coverage grid is an overview: it fades out by this zoom, where footprints take over. */
+const COVERAGE_MAX_ZOOM = 11.5
+
+function coverageColor(): any {
+  const ramp = isDark.value
+    ? ['#15346e', '#1f50b0', '#3d7cf0', '#7eaaff', '#c4d9ff']
+    : ['#d3e2ff', '#9cc0ff', '#5b98ff', '#1f6fff', '#0a3a9e']
+  return ['interpolate', ['linear'], coverage.valueExpression(), 1, ramp[0], 4, ramp[1], 12, ramp[2], 30, ramp[3], 80, ramp[4]]
+}
+
 /** Orthophotos only load from z10 and cover the mainland, so satellite sits underneath. */
 function isBasemapVisible(id: string) {
   const active = basemapLayerId(store.basemap.value)
@@ -100,6 +112,7 @@ function buildStyle(): StyleSpecification {
       ...LABEL_SOURCES,
       ...BOUNDARY_SOURCES,
       area: { type: 'geojson', data: emptyFC },
+      coverage: { type: 'geojson', data: emptyFC },
       footprints: { type: 'geojson', data: emptyFC, promoteId: 'uid' },
       draw: { type: 'geojson', data: emptyFC },
     },
@@ -110,6 +123,17 @@ function buildStyle(): StyleSpecification {
         layout: { visibility: (isBasemapVisible(id) ? 'visible' : 'none') as 'visible' | 'none' },
         paint: { 'raster-fade-duration': 150 },
       })),
+      // Where the archive has photos (country-wide grid), fading out as you zoom in
+      {
+        id: 'coverage-fill', type: 'fill', source: 'coverage',
+        layout: { visibility: store.showCoverage.value ? 'visible' : 'none' },
+        filter: ['>', coverage.valueExpression(), 0],
+        paint: {
+          'fill-color': coverageColor(),
+          'fill-opacity': ['interpolate', ['linear'], ['zoom'], 5, 0.6, 10, 0.45, COVERAGE_MAX_ZOOM, 0],
+          'fill-antialias': false,
+        },
+      },
       // photo overlays are inserted here, below the labels
       ...Object.keys(LABEL_SOURCES).map(id => ({
         id, type: 'raster' as const, source: id,
@@ -191,6 +215,7 @@ onMounted(() => {
 
   map.on('load', () => {
     store.map.value = map
+    coverage.load().then(() => src<GeoJSONSource>('coverage')?.setData(coverage.geojson.value ?? emptyFC))
     syncFootprints()
     syncArea()
     syncOverlays()
@@ -208,6 +233,13 @@ onMounted(() => {
     map.getCanvas().style.cursor = cursorForMode()
   })
   map.on('click', onClick)
+  map.on('mousemove', 'coverage-fill', onCoverageHover)
+  map.on('mouseleave', 'coverage-fill', () => { coverageTip.value = null })
+  // Right-click / long-press: this spot through time
+  map.on('contextmenu', (e) => {
+    e.preventDefault()
+    store.openTimelapse([e.lngLat.lng, e.lngLat.lat])
+  })
 
   map.on('mousedown', onDrawStart)
   map.on('touchstart', onDrawStart)
@@ -310,6 +342,12 @@ watch([store.area, store.boundary], syncArea)
 watch(store.showBoundaries, (show) => {
   for (const id of Object.keys(BOUNDARY_SOURCES)) map?.setLayoutProperty(id, 'visibility', show ? 'visible' : 'none')
 })
+watch(coverage.decades, () => {
+  if (!map?.getLayer('coverage-fill')) return
+  map.setFilter('coverage-fill', ['>', coverage.valueExpression(), 0])
+  map.setPaintProperty('coverage-fill', 'fill-color', coverageColor())
+}, { deep: true })
+watch(store.showCoverage, show => map?.setLayoutProperty('coverage-fill', 'visibility', show ? 'visible' : 'none'))
 watch(store.showFootprints, (show) => {
   for (const id of ['footprints-fill', 'footprints-line']) map?.setLayoutProperty(id, 'visibility', show ? 'visible' : 'none')
 })
@@ -336,6 +374,7 @@ watch(isDark, () => {
   map.setPaintProperty('area-line', 'line-color', isDark.value ? '#f2f4f7' : '#0f1115')
   map.setPaintProperty('draw-fill', 'fill-color', accent)
   map.setPaintProperty('draw-line', 'line-color', accent)
+  map.setPaintProperty('coverage-fill', 'fill-color', coverageColor())
   map.setPaintProperty('bg', 'background-color', isDark.value ? '#0c0d10' : '#f5f6f8')
 
 })
@@ -413,6 +452,7 @@ function onClick(e: MapMouseEvent) {
     .sort((a, b) => (a.date ?? '').localeCompare(b.date ?? ''))
   if (!hits.length) {
     popup.value = null
+    searchCoverageCell(e)
     return
   }
   if (hits.length === 1) {
@@ -421,6 +461,33 @@ function onClick(e: MapMouseEvent) {
     return
   }
   popup.value = { x: e.point.x, y: e.point.y, photos: hits }
+}
+
+// Coverage grid: hover hint and click-to-search ------------------------------------
+const coverageTip = ref<{ x: number, y: number, count: number } | null>(null)
+
+function coverageAt(e: MapMouseEvent) {
+  if (map.getZoom() >= COVERAGE_MAX_ZOOM - 0.5 || !store.showCoverage.value) return null
+  return map.queryRenderedFeatures(e.point, { layers: ['coverage-fill'] })[0] ?? null
+}
+
+function onCoverageHover(e: MapMouseEvent) {
+  if (store.mode.value !== 'pan' || store.hovered.value) return (coverageTip.value = null)
+  const f = coverageAt(e)
+  if (!f) return (coverageTip.value = null)
+  const idx = coverage.decades.value.length ? coverage.decades.value : DECADES.map((_, i) => i)
+  const count = idx.reduce((n, i) => n + Number(f.properties?.[`c${i}`] ?? 0), 0)
+  coverageTip.value = { x: e.point.x, y: e.point.y, count }
+  map.getCanvas().style.cursor = 'pointer'
+}
+
+function searchCoverageCell(e: MapMouseEvent) {
+  const f = coverageAt(e)
+  if (!f || f.geometry.type !== 'Polygon') return
+  const ring = f.geometry.coordinates[0]!
+  const xs = ring.map(c => c[0]!), ys = ring.map(c => c[1]!)
+  coverageTip.value = null
+  store.setArea({ kind: 'box', label: t('coverage.cell'), bbox: [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)] }, { fit: true })
 }
 
 // Box drawing -------------------------------------------------------------------
@@ -614,6 +681,16 @@ const popupStyle = computed(() => {
         </button>
       </div>
     </Transition>
+
+    <!-- Coverage hint -->
+    <div
+      v-if="coverageTip"
+      class="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-[calc(100%+12px)] whitespace-nowrap rounded-lg bg-ink/90 px-2.5 py-1.5 text-xs text-paper shadow-lg backdrop-blur"
+      :style="{ left: `${coverageTip.x}px`, top: `${coverageTip.y}px` }"
+    >
+      <b class="font-semibold">{{ t('coverage.tip', { n: coverageTip.count.toLocaleString(lang === 'pt' ? 'pt-PT' : 'en-GB') }) }}</b>
+      <span class="opacity-70"> · {{ t('coverage.click') }}</span>
+    </div>
 
     <!-- Overlapping footprints picker -->
     <div

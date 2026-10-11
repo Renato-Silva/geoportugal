@@ -60,6 +60,9 @@ const avgOpacity = computed(() => store.overlays.value.length
         <button type="button" class="flex items-center gap-1 rounded-lg border border-rule px-2.5 py-1.5 text-xs text-ink-2 hover:border-ink-3 hover:text-ink" @click="dl.downloadZip(photos, 'geoportugal_mapa')">
           <Icon name="download" :size="14" /> {{ t('map.zip') }}
         </button>
+        <button type="button" class="flex items-center gap-1 rounded-lg border border-rule px-2.5 py-1.5 text-xs text-ink-2 hover:border-ink-3 hover:text-ink" :title="t('results.mosaicHint')" @click="dl.downloadMosaic(photos, 'geoportugal_mosaico')">
+          <Icon name="globe" :size="14" /> {{ t('map.mosaic') }}
+        </button>
         <button type="button" class="ml-auto flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs text-ink-3 hover:text-accent" @click="store.clearOverlays()">
           <Icon name="trash" :size="14" /> {{ t('map.clear') }}
         </button>

@@ -67,13 +67,16 @@ const fileName = computed(() => `geoportugal_${(store.area.value?.label ?? 'area
     <!-- selection bar -->
     <div v-if="store.selected.value.length" class="rise sticky top-[57px] z-10 -mx-2 mt-2 flex items-center gap-1 rounded-xl bg-accent px-3 py-2 text-accent-ink shadow-panel">
       <span class="mr-auto text-sm font-medium">{{ t('results.selected', { n: store.selected.value.length }) }}</span>
-      <button type="button" class="flex items-center gap-1 rounded-md px-2 py-1 text-xs hover:bg-paper/15" @click="store.addOverlays(selectedPhotos)">
+      <button type="button" class="flex items-center gap-1 rounded-md px-2 py-1 text-xs hover:bg-white/15" @click="store.addOverlays(selectedPhotos)">
         <Icon name="map" :size="14" /> {{ t('results.addMap') }}
       </button>
-      <button type="button" class="flex items-center gap-1 rounded-md px-2 py-1 text-xs hover:bg-paper/15" @click="dl.downloadZip(selectedPhotos, fileName)">
+      <button type="button" class="flex items-center gap-1 rounded-md px-2 py-1 text-xs hover:bg-white/15" @click="dl.downloadZip(selectedPhotos, fileName)">
         <Icon name="download" :size="14" /> ZIP
       </button>
-      <button type="button" class="grid size-7 place-items-center rounded-md hover:bg-paper/15" :aria-label="t('results.clearSel')" @click="store.selected.value = []">
+      <button type="button" class="flex items-center gap-1 rounded-md px-2 py-1 text-xs hover:bg-white/15" :title="t('results.mosaicHint')" @click="dl.downloadMosaic(selectedPhotos, `${fileName}_mosaico`)">
+        <Icon name="globe" :size="14" /> {{ t('results.mosaic') }}
+      </button>
+      <button type="button" class="grid size-7 place-items-center rounded-md hover:bg-white/15" :aria-label="t('results.clearSel')" @click="store.selected.value = []">
         <Icon name="close" :size="14" />
       </button>
     </div>
@@ -102,15 +105,26 @@ const fileName = computed(() => `geoportugal_${(store.area.value?.label ?? 'area
             </p>
             </div>
           </div>
+          <div class="mt-0.5 flex shrink-0 gap-1">
           <button
             type="button"
-            class="mt-0.5 flex shrink-0 items-center gap-1 rounded-md border px-2 py-1 text-[11px] transition"
+            class="grid size-[26px] place-items-center rounded-md border border-rule text-ink-2 transition hover:border-ink-3 hover:text-ink"
+            :title="t('results.mosaicHint')"
+            :aria-label="t('results.mosaicHint')"
+            @click="dl.downloadMosaic(g.photos, `${fileName}_${g.rolo.replace(/[^\w]+/g, '-')}`)"
+          >
+            <Icon name="globe" :size="13" />
+          </button>
+          <button
+            type="button"
+            class="flex shrink-0 items-center gap-1 rounded-md border px-2 py-1 text-[11px] transition"
             :class="allOnMap(g) ? 'border-accent bg-accent text-accent-ink' : 'border-rule text-ink-2 hover:border-ink-3 hover:text-ink'"
             :aria-pressed="allOnMap(g)"
             @click="toggleGroupOnMap(g)"
           >
             <Icon name="map" :size="13" /> {{ allOnMap(g) ? t('photo.removeMap') : t('results.addMap') }}
           </button>
+          </div>
         </header>
         <div class="grid grid-cols-4 gap-2">
           <PhotoCard v-for="p in g.photos" :key="p.uid" :photo="p" :list="store.photos.value" :index="indexOf(p)" selectable />

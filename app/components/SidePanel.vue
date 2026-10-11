@@ -86,7 +86,10 @@ watch(store.area, (a) => { if (a) collapsed.value = false })
           </button>
         </div>
 
+        <CoverageCard v-else />
+
         <template v-if="store.area.value">
+          <TimelapseCard />
           <Timeline />
           <ScaleFilter />
           <ResultsList v-if="store.summary.value.length || store.photos.value.length" />

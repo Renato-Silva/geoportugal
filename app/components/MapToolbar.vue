@@ -62,6 +62,9 @@ const yearBtn = (active: boolean) => [
         </div>
 
         <div class="my-1 border-t border-rule" />
+        <MenuItem icon="frames" :active="store.showCoverage.value" @click="store.showCoverage.value = !store.showCoverage.value">
+          {{ t('coverage.layer') }}
+        </MenuItem>
         <MenuItem icon="borders" :active="store.showBoundaries.value" @click="store.showBoundaries.value = !store.showBoundaries.value">
           {{ t('map.boundaries') }}
         </MenuItem>

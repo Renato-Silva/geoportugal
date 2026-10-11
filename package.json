@@ -8,7 +8,8 @@
     "preview": "nuxt preview",
     "generate": "nuxt generate",
     "postinstall": "nuxt prepare",
-    "typecheck": "nuxt typecheck"
+    "typecheck": "nuxt typecheck",
+    "build:coverage": "node scripts/build-coverage.mjs"
   },
   "dependencies": {
     "aws4fetch": "^1.0.20",

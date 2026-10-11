@@ -9,6 +9,7 @@ const map = ref<{ exportPng: () => void }>()
       <MapToolbar @export-png="map?.exportPng()" />
     </div>
     <SidePanel />
+    <Timelapse />
     <PhotoViewer />
     <Toasts />
   </main>

@@ -238,7 +238,10 @@ const meta = computed(() => {
           <a :href="photoUrl(photo, 'original', { download: true })" class="flex items-center justify-center gap-1.5 rounded-lg border border-rule bg-card py-2 text-[13px] hover:bg-paper-2">
             <Icon name="download" :size="15" /> {{ t('photo.download') }}
           </a>
-          <a :href="sourceUrl(photo)" target="_blank" rel="noopener" class="flex items-center justify-center gap-1.5 rounded-lg border border-rule bg-card py-2 text-[13px] hover:bg-paper-2">
+          <button type="button" class="flex items-center justify-center gap-1.5 rounded-lg border border-rule bg-card py-2 text-[13px] hover:bg-paper-2" :title="t('photo.georefHint')" @click="dl.downloadGeoref(photo)">
+            <Icon name="globe" :size="15" /> {{ t('photo.georef') }}
+          </button>
+          <a :href="sourceUrl(photo)" target="_blank" rel="noopener" class="col-span-2 flex items-center justify-center gap-1.5 rounded-lg border border-rule bg-card py-2 text-[13px] hover:bg-paper-2">
             <Icon name="external" :size="15" /> {{ t('photo.source') }}
           </a>
         </div>

@@ -44,12 +44,15 @@ const selected = ref<string[]>([])
 const overlays = ref<Overlay[]>([])
 const cleanEdges = ref(readStore('geoportugal:cleanEdges', true))
 const showBoundaries = ref(readStore('geoportugal:boundaries', false))
+const showCoverage = ref(readStore('geoportugal:coverage', true))
 const showFootprints = ref(true)
 const basemap = ref<BasemapId>('map')
 const compare = reactive({ enabled: false, position: 0.5, year: 2021 as OrthoYear })
 const mode = ref<MapMode>('pan')
 
 const viewer = shallowRef<{ list: Photo[], index: number } | null>(null)
+/** Open time-lapse ("this spot through time") */
+const timelapse = shallowRef<{ point: [number, number], label: string } | null>(null)
 
 const favs = ref<Photo[]>(readStore('geoportugal:favs', []))
 const recentAreas = ref<Area[]>(readStore('geoportugal:recentAreas', []))
@@ -60,6 +63,7 @@ watch(recentAreas, v => writeStore('geoportugal:recentAreas', v), { deep: true }
 watch(recentPhotos, v => writeStore('geoportugal:recentPhotos', v), { deep: true })
 watch(cleanEdges, v => writeStore('geoportugal:cleanEdges', v))
 watch(showBoundaries, v => writeStore('geoportugal:boundaries', v))
+watch(showCoverage, v => writeStore('geoportugal:coverage', v))
 
 // ---------------------------------------------------------------------------
 // Derived
@@ -267,6 +271,10 @@ function closeViewer() {
   viewer.value = null
 }
 
+function openTimelapse(point: [number, number], label = '') {
+  timelapse.value = { point, label }
+}
+
 watch(viewer, (v) => {
   const p = v?.list[v.index]
   if (p) recentPhotos.value = [p, ...recentPhotos.value.filter(r => r.uid !== p.uid)].slice(0, 24)
@@ -350,6 +358,7 @@ function buildUrl(includeView = true) {
   if (compare.enabled && compare.year !== 2021) q.set('cy', String(compare.year))
   const v = viewer.value?.list[viewer.value.index]
   if (v) q.set('photo', v.uid)
+  if (timelapse.value) q.set('tl', timelapse.value.point.map(n => n.toFixed(5)).join(','))
   const s = q.toString().replace(/%2C/g, ',').replace(/%2F/g, '/')
   return `${location.pathname}${s ? `?${s}` : ''}`
 }
@@ -366,7 +375,7 @@ async function restoreFromUrl() {
   restored = true
   const s = readUrl()
   if (s.view) view.value = s.view
-  watch([view, area, years, scales, overlays, basemap, () => compare.enabled, () => compare.year, viewer], scheduleUrlWrite, { deep: true })
+  watch([view, area, years, scales, overlays, basemap, () => compare.enabled, () => compare.year, viewer, timelapse], scheduleUrlWrite, { deep: true })
 
   const tasks: Promise<unknown>[] = []
   if (s.area) {
@@ -374,6 +383,8 @@ async function restoreFromUrl() {
     scales.value = s.scales
     tasks.push(setArea(s.area, { keepFilters: !!(s.years || s.scales.length), fit: !s.view }))
   }
+  const tl = new URLSearchParams(location.search).get('tl')?.split(',').map(Number)
+  if (tl?.length === 2 && tl.every(Number.isFinite)) openTimelapse(tl as [number, number], s.area?.label ?? '')
   const uids = [...new Set([...s.overlays, ...(s.viewerUid ? [s.viewerUid] : [])])]
   if (uids.length) {
     tasks.push(fetchPhotosByUid(uids).then((found) => {
@@ -390,9 +401,9 @@ async function restoreFromUrl() {
 export function useFototeca() {
   return {
     // state
-    map, tab, area, boundary, showBoundaries, summary, summaryState, years, scales, newestFirst,
+    map, tab, area, boundary, showBoundaries, showCoverage, summary, summaryState, years, scales, newestFirst,
     photos, total, photosState, hovered, selected, overlays, cleanEdges, showFootprints,
-    basemap, compare, mode, viewer, favs, recentAreas, recentPhotos, view,
+    basemap, compare, mode, viewer, timelapse, openTimelapse, favs, recentAreas, recentPhotos, view,
     // derived
     dataYears, yearCounts, scaleCounts, overlayUids, favUids,
     // actions
