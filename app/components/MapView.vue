@@ -9,7 +9,7 @@ import { yearColorExpression } from '~/utils/colors'
 import { photosAsGeoJSON } from '~/utils/wfs'
 import { photoUrl } from '~/utils/photoUrl'
 import { saveBlob } from '~/utils/exporters'
-import type { BasemapId } from '~/composables/useFototeca'
+import { ORTHO_YEARS, type BasemapId } from '~/composables/useFototeca'
 
 const store = useFototeca()
 const { t } = useI18n()
@@ -48,16 +48,11 @@ const BASEMAP_SOURCES: Record<string, StyleSpecification['sources'][string]> = {
     tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
     attribution: 'Imagery © Esri, Maxar, Earthstar Geographics',
   },
-  'bm-ortos2021': {
-    type: 'raster', tileSize: 256, minzoom: 10, maxzoom: 20, bounds: PT_MAINLAND,
-    tiles: [dgtWms(2021)],
-    attribution: 'Ortofotos 2021 © DGT',
-  },
-  'bm-ortos2018': {
-    type: 'raster', tileSize: 256, minzoom: 10, maxzoom: 20, bounds: PT_MAINLAND,
-    tiles: [dgtWms(2018)],
-    attribution: 'Ortofotos 2018 © DGT',
-  },
+  ...Object.fromEntries(ORTHO_YEARS.map(year => [`bm-ortos${year}`, {
+    type: 'raster' as const, tileSize: 256, minzoom: 10, maxzoom: 20, bounds: PT_MAINLAND,
+    tiles: [dgtWms(year)],
+    attribution: `Ortofotos ${year} © DGT`,
+  }])),
 }
 
 const LABEL_SOURCES: Record<string, StyleSpecification['sources'][string]> = {
@@ -76,9 +71,6 @@ const labelLayerId = () => store.basemap.value === 'osm' ? null : (isDark.value 
 
 const basemapLayerId = (b: BasemapId) => b === 'map' ? (isDark.value ? 'bm-dark' : 'bm-light') : `bm-${b}`
 
-/** For "then / now", compare against modern imagery: DGT orthos in Portugal, else satellite. */
-const compareLayer = computed(() =>
-  store.basemap.value === 'ortos2018' || store.basemap.value === 'ortos2021' ? 'bm-satellite' : 'bm-ortos2021')
 
 const emptyFC: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] }
 
@@ -422,10 +414,14 @@ function syncCompareCamera() {
   compareMap?.jumpTo({ center: map.getCenter(), zoom: map.getZoom(), bearing: map.getBearing(), pitch: map.getPitch() })
 }
 
+/** "Now" side: the chosen orthophoto year (mainland, z10+) over satellite imagery. */
 function setupCompareLayer() {
   if (!compareMap?.isStyleLoaded()) return
-  compareMap.setLayoutProperty('bm-ortos2021', 'visibility', compareLayer.value === 'bm-ortos2021' ? 'visible' : 'none')
+  for (const y of ORTHO_YEARS)
+    compareMap.setLayoutProperty(`bm-ortos${y}`, 'visibility', y === store.compare.year ? 'visible' : 'none')
 }
+
+watch(() => store.compare.year, setupCompareLayer)
 
 watch(() => store.compare.enabled, async (on) => {
   if (!on) {
@@ -450,12 +446,15 @@ watch(() => store.compare.enabled, async (on) => {
       version: 8,
       sources: {
         'bm-satellite': BASEMAP_SOURCES['bm-satellite']!,
-        'bm-ortos2021': BASEMAP_SOURCES['bm-ortos2021']!,
+        ...Object.fromEntries(ORTHO_YEARS.map(y => [`bm-ortos${y}`, BASEMAP_SOURCES[`bm-ortos${y}`]!])),
       },
       layers: [
         { id: 'bg', type: 'background', paint: { 'background-color': '#1a1c21' } },
         { id: 'bm-satellite', type: 'raster', source: 'bm-satellite' },
-        { id: 'bm-ortos2021', type: 'raster', source: 'bm-ortos2021' },
+        ...ORTHO_YEARS.map(y => ({
+          id: `bm-ortos${y}`, type: 'raster' as const, source: `bm-ortos${y}`,
+          layout: { visibility: (y === store.compare.year ? 'visible' : 'none') as 'visible' | 'none' },
+        })),
       ],
     },
   })

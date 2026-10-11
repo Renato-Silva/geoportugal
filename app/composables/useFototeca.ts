@@ -5,7 +5,11 @@ import { fetchPhotos, fetchPhotosByUid } from '~/utils/wfs'
 import { parseBbox, roundBbox } from '~/utils/geo'
 import { readStore, writeStore } from '~/utils/storage'
 
-export type BasemapId = 'map' | 'osm' | 'satellite' | 'ortos2021' | 'ortos2018'
+/** Orthophoto years DGT publishes as a public WMS. */
+export const ORTHO_YEARS = [2007, 2010, 2012, 2015, 2018, 2021] as const
+export type OrthoYear = typeof ORTHO_YEARS[number]
+export type BasemapId = 'map' | 'osm' | 'satellite' | `ortos${OrthoYear}`
+const BASEMAP_IDS: BasemapId[] = ['map', 'osm', 'satellite', ...ORTHO_YEARS.map(y => `ortos${y}` as const)]
 export type MapMode = 'pan' | 'box' | 'point'
 export type Tab = 'search' | 'map' | 'saved'
 
@@ -38,7 +42,7 @@ const overlays = ref<Overlay[]>([])
 const cleanEdges = ref(readStore('geoportugal:cleanEdges', true))
 const showFootprints = ref(true)
 const basemap = ref<BasemapId>('map')
-const compare = reactive({ enabled: false, position: 0.5 })
+const compare = reactive({ enabled: false, position: 0.5, year: 2021 as OrthoYear })
 const mode = ref<MapMode>('pan')
 
 const viewer = shallowRef<{ list: Photo[], index: number } | null>(null)
@@ -283,8 +287,10 @@ function readUrl() {
   out.scales = (q.get('scales') ?? '').split(',').map(Number).filter(n => n > 0)
   out.overlays = (q.get('on') ?? '').split(',').filter(Boolean)
   const bm = q.get('base') as BasemapId | null
-  if (bm && ['map', 'osm', 'satellite', 'ortos2021', 'ortos2018'].includes(bm)) basemap.value = bm
+  if (bm && BASEMAP_IDS.includes(bm)) basemap.value = bm
   if (q.get('compare') === '1') compare.enabled = true
+  const cy = Number(q.get('cy'))
+  if ((ORTHO_YEARS as readonly number[]).includes(cy)) compare.year = cy as OrthoYear
   return out
 }
 
@@ -307,6 +313,7 @@ function buildUrl(includeView = true) {
   if (overlays.value.length) q.set('on', overlays.value.map(o => o.photo.uid).join(','))
   if (basemap.value !== 'map') q.set('base', basemap.value)
   if (compare.enabled) q.set('compare', '1')
+  if (compare.enabled && compare.year !== 2021) q.set('cy', String(compare.year))
   const v = viewer.value?.list[viewer.value.index]
   if (v) q.set('photo', v.uid)
   const s = q.toString().replace(/%2C/g, ',').replace(/%2F/g, '/')
@@ -325,7 +332,7 @@ async function restoreFromUrl() {
   restored = true
   const s = readUrl()
   if (s.view) view.value = s.view
-  watch([view, area, years, scales, overlays, basemap, () => compare.enabled, viewer], scheduleUrlWrite, { deep: true })
+  watch([view, area, years, scales, overlays, basemap, () => compare.enabled, () => compare.year, viewer], scheduleUrlWrite, { deep: true })
 
   const tasks: Promise<unknown>[] = []
   if (s.area) {

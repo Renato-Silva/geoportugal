@@ -1,0 +1,18 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    ports:
+      # Put a reverse proxy (TLS) in front; set APP_BIND=0.0.0.0 to expose it directly
+      - "${APP_BIND:-127.0.0.1}:${APP_PORT:-3000}:3000"
+    volumes:
+      - data:/app/.data
+    logging:
+      driver: json-file
+      options: { max-size: 10m, max-file: "3" }
+
+volumes:
+  data:

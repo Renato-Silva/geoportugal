@@ -29,7 +29,8 @@ export default defineNuxtConfig({
   runtimeConfig: {
     fototecaBase: 'https://geo5.dgterritorio.gov.pt/fototeca',
     // Optional S3-compatible storage for fetched imagery (NUXT_S3_BUCKET, NUXT_S3_REGION, …).
-    // When empty, imagery is stored on local disk in .data/archive.
+    // When empty, imagery is stored on local disk in archiveDir (NUXT_ARCHIVE_DIR).
+    archiveDir: '.data/archive',
     s3: {
       bucket: '',
       region: '',
