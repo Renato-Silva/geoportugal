@@ -9,6 +9,7 @@ const basemaps = computed<{ id: BasemapId, label: string, swatch: string }[]>(()
   { id: 'map', label: t('basemap.map'), swatch: 'linear-gradient(135deg,#f4f5f7,#d9dde3)' },
   { id: 'osm', label: t('basemap.osm'), swatch: 'linear-gradient(135deg,#f2efe9,#aad3df 60%,#c8e6a0)' },
   { id: 'satellite', label: t('basemap.satellite'), swatch: 'linear-gradient(135deg,#3c4a2c,#6b6a4b 50%,#24323d)' },
+  { id: 'itineraria', label: t('basemap.itineraria'), swatch: 'linear-gradient(135deg,#f3eedc,#e8c27a 40%,#d9534f 55%,#9fc59a)' },
 ])
 
 const currentLabel = computed(() => {
@@ -17,7 +18,7 @@ const currentLabel = computed(() => {
 })
 
 const yearBtn = (active: boolean) => [
-  'rounded-lg border py-1.5 text-[13px] font-medium tabular-nums transition',
+  'relative rounded-lg border py-1.5 text-[13px] font-medium tabular-nums transition',
   active ? 'border-accent bg-accent text-accent-ink' : 'border-rule bg-card text-ink-2 hover:border-ink-3 hover:text-ink',
 ]
 </script>
@@ -54,9 +55,14 @@ const yearBtn = (active: boolean) => [
               type="button"
               :class="yearBtn(store.basemap.value === `ortos${y}`)"
               :aria-pressed="store.basemap.value === `ortos${y}`"
+              :title="y === 2023 ? t('basemap.sat') : undefined"
               @click="store.basemap.value = `ortos${y}`"
             >
-              <span :title="y === 2023 ? t('basemap.sat') : undefined">{{ y }}<sup v-if="y === 2023" class="ml-0.5 text-[9px] font-semibold opacity-70">SAT</sup></span>
+              {{ y }}
+              <span
+                v-if="y === 2023"
+                class="absolute -top-1.5 right-1 rounded-full border border-rule bg-card px-1 text-[8.5px] font-semibold uppercase leading-[13px] tracking-wide text-ink-3"
+              >sat</span>
             </button>
           </div>
         </div>
@@ -64,6 +70,9 @@ const yearBtn = (active: boolean) => [
         <div class="my-1 border-t border-rule" />
         <MenuItem icon="frames" :active="store.showCoverage.value" @click="store.showCoverage.value = !store.showCoverage.value">
           {{ t('coverage.layer') }}
+        </MenuItem>
+        <MenuItem icon="frames" :active="store.showSheets.value" @click="store.showSheets.value = !store.showSheets.value">
+          {{ t('sheets.layer') }}
         </MenuItem>
         <MenuItem icon="borders" :active="store.showBoundaries.value" @click="store.showBoundaries.value = !store.showBoundaries.value">
           {{ t('map.boundaries') }}
@@ -108,9 +117,14 @@ const yearBtn = (active: boolean) => [
               type="button"
               :class="yearBtn(store.compare.year === y)"
               :aria-pressed="store.compare.year === y"
+              :title="y === 2023 ? t('basemap.sat') : undefined"
               @click="store.compare.year = y"
             >
-              <span :title="y === 2023 ? t('basemap.sat') : undefined">{{ y }}<sup v-if="y === 2023" class="ml-0.5 text-[9px] font-semibold opacity-70">SAT</sup></span>
+              {{ y }}
+              <span
+                v-if="y === 2023"
+                class="absolute -top-1.5 right-1 rounded-full border border-rule bg-card px-1 text-[8.5px] font-semibold uppercase leading-[13px] tracking-wide text-ink-3"
+              >sat</span>
             </button>
           </div>
         </div>

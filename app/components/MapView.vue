@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import {
   AttributionControl, GeolocateControl, Map as MlMap, NavigationControl, ScaleControl,
-  type GeoJSONSource, type ImageSource, type MapMouseEvent, type MapTouchEvent, type StyleSpecification,
+  setWorkerUrl, type GeoJSONSource, type ImageSource, type MapMouseEvent, type MapTouchEvent, type StyleSpecification,
 } from 'maplibre-gl'
+// MapLibre builds its worker URL at runtime, so Vite never emits the file; ship it as an asset instead.
+import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url'
 import type { Bbox, Photo, PhotoLocation } from '~/utils/types'
 import { bboxCorners, bboxPolygon, pointBbox } from '~/utils/geo'
 import { yearColorExpression } from '~/utils/colors'
@@ -12,8 +14,11 @@ import { photoUrl } from '~/utils/photoUrl'
 import { saveBlob } from '~/utils/exporters'
 import { ORTHO_YEARS, type BasemapId } from '~/composables/useFototeca'
 
+setWorkerUrl(workerUrl)
+
 const store = useFototeca()
 const coverage = useCoverage()
+const sheets = useSheets()
 const { t, lang } = useI18n()
 const { isDark } = useTheme()
 
@@ -44,6 +49,11 @@ const BASEMAP_SOURCES: Record<string, StyleSpecification['sources'][string]> = {
     type: 'raster', tileSize: 256, maxzoom: 19,
     tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
     attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+  },
+  'bm-itineraria': {
+    type: 'raster', tileSize: 256, minzoom: 5, maxzoom: 13, bounds: [-10.2, 36.85, -6.05, 42.25],
+    tiles: [`${location.origin}/api/itineraria?z={z}&x={x}&y={y}`],
+    attribution: 'Carta Militar Itinerária 1:500 000 © CIGeoE',
   },
   'bm-satellite': {
     type: 'raster', tileSize: 256, maxzoom: 19,
@@ -81,7 +91,7 @@ const LABEL_SOURCES: Record<string, StyleSpecification['sources'][string]> = {
 }
 
 /** Place-name labels drawn above the photos, so overlays never hide where you are. */
-const labelLayerId = () => store.basemap.value === 'osm' ? null : (isDark.value || store.basemap.value === 'satellite' || store.basemap.value.startsWith('ortos')) ? 'lb-dark' : 'lb-light'
+const labelLayerId = () => store.basemap.value === 'osm' || store.basemap.value === 'itineraria' ? null : (isDark.value || store.basemap.value === 'satellite' || store.basemap.value.startsWith('ortos')) ? 'lb-dark' : 'lb-light'
 
 const basemapLayerId = (b: BasemapId) => b === 'map' ? (isDark.value ? 'bm-dark' : 'bm-light') : `bm-${b}`
 
@@ -101,18 +111,23 @@ function coverageColor(): any {
 /** Orthophotos only load from z10 and cover the mainland, so satellite sits underneath. */
 function isBasemapVisible(id: string) {
   const active = basemapLayerId(store.basemap.value)
-  return id === active || (id === 'bm-satellite' && active.startsWith('bm-ortos'))
+  return id === active
+    || (id === 'bm-satellite' && active.startsWith('bm-ortos'))
+    // the road map only covers mainland Portugal and stops at z5
+    || (id === (isDark.value ? 'bm-dark' : 'bm-light') && active === 'bm-itineraria')
 }
 
 function buildStyle(): StyleSpecification {
   return {
     version: 8,
+    glyphs: 'https://protomaps.github.io/basemaps-assets/fonts/{fontstack}/{range}.pbf',
     sources: {
       ...BASEMAP_SOURCES,
       ...LABEL_SOURCES,
       ...BOUNDARY_SOURCES,
       area: { type: 'geojson', data: emptyFC },
       coverage: { type: 'geojson', data: emptyFC },
+      sheets: { type: 'geojson', data: emptyFC },
       footprints: { type: 'geojson', data: emptyFC, promoteId: 'uid' },
       draw: { type: 'geojson', data: emptyFC },
     },
@@ -146,6 +161,24 @@ function buildStyle(): StyleSpecification {
         layout: { visibility: (store.showBoundaries.value ? 'visible' : 'none') as 'visible' | 'none' },
         paint: { 'raster-saturation': -1, 'raster-opacity': 0.9, ...boundaryBrightness() },
       })),
+      // Carta Militar 1:25 000 sheet grid with sheet numbers
+      {
+        id: 'sheets-line', type: 'line', source: 'sheets', minzoom: 6,
+        layout: { visibility: store.showSheets.value ? 'visible' : 'none' },
+        paint: { 'line-color': '#b4232a', 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 0.6, 12, 1.4], 'line-opacity': 0.75 },
+      },
+      {
+        id: 'sheets-label', type: 'symbol', source: 'sheets', minzoom: 7.5,
+        layout: {
+          'visibility': store.showSheets.value ? 'visible' : 'none',
+          'text-field': ['case', ['==', ['get', 'series'], 'M888'], ['get', 'sheet'], ['concat', ['get', 'series'], ' ', ['get', 'sheet']]],
+          'text-font': ['Noto Sans Medium'],
+          'text-size': ['interpolate', ['linear'], ['zoom'], 7.5, 11, 12, 16],
+          'symbol-placement': 'point',
+          'text-allow-overlap': false,
+        },
+        paint: { 'text-color': '#8f1b21', 'text-halo-color': '#ffffff', 'text-halo-width': 1.6 },
+      },
       {
         id: 'area-fill', type: 'fill', source: 'area', filter: ['==', '$type', 'Polygon'],
         paint: { 'fill-color': isDark.value ? '#4c8dff' : '#1f6fff', 'fill-opacity': 0.04 },
@@ -216,6 +249,7 @@ onMounted(() => {
   map.on('load', () => {
     store.map.value = map
     coverage.load().then(() => src<GeoJSONSource>('coverage')?.setData(coverage.geojson.value ?? emptyFC))
+    if (store.showSheets.value) sheets.load().then(() => src<GeoJSONSource>('sheets')?.setData(sheets.geojson.value ?? emptyFC))
     syncFootprints()
     syncArea()
     syncOverlays()
@@ -347,6 +381,13 @@ watch(coverage.decades, () => {
   map.setFilter('coverage-fill', ['>', coverage.valueExpression(), 0])
   map.setPaintProperty('coverage-fill', 'fill-color', coverageColor())
 }, { deep: true })
+watch(store.showSheets, async (show) => {
+  for (const id of ['sheets-line', 'sheets-label']) map?.setLayoutProperty(id, 'visibility', show ? 'visible' : 'none')
+  if (show) {
+    await sheets.load()
+    src<GeoJSONSource>('sheets')?.setData(sheets.geojson.value ?? emptyFC)
+  }
+}, { immediate: false })
 watch(store.showCoverage, show => map?.setLayoutProperty('coverage-fill', 'visibility', show ? 'visible' : 'none'))
 watch(store.showFootprints, (show) => {
   for (const id of ['footprints-fill', 'footprints-line']) map?.setLayoutProperty(id, 'visibility', show ? 'visible' : 'none')

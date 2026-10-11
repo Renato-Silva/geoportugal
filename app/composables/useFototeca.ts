@@ -9,8 +9,8 @@ import { readStore, writeStore } from '~/utils/storage'
 /** Orthophoto years with a public WMS; 2023 is DGT's satellite orthomosaic. */
 export const ORTHO_YEARS = [2007, 2010, 2012, 2015, 2018, 2021, 2023] as const
 export type OrthoYear = typeof ORTHO_YEARS[number]
-export type BasemapId = 'map' | 'osm' | 'satellite' | `ortos${OrthoYear}`
-const BASEMAP_IDS: BasemapId[] = ['map', 'osm', 'satellite', ...ORTHO_YEARS.map(y => `ortos${y}` as const)]
+export type BasemapId = 'map' | 'osm' | 'satellite' | 'itineraria' | `ortos${OrthoYear}`
+const BASEMAP_IDS: BasemapId[] = ['map', 'osm', 'satellite', 'itineraria', ...ORTHO_YEARS.map(y => `ortos${y}` as const)]
 export type MapMode = 'pan' | 'box' | 'point'
 export type Tab = 'search' | 'map' | 'saved'
 
@@ -45,6 +45,7 @@ const overlays = ref<Overlay[]>([])
 const cleanEdges = ref(readStore('geoportugal:cleanEdges', true))
 const showBoundaries = ref(readStore('geoportugal:boundaries', false))
 const showCoverage = ref(readStore('geoportugal:coverage', true))
+const showSheets = ref(readStore('geoportugal:sheets', false))
 const showFootprints = ref(true)
 const basemap = ref<BasemapId>('map')
 const compare = reactive({ enabled: false, position: 0.5, year: 2021 as OrthoYear })
@@ -64,6 +65,7 @@ watch(recentPhotos, v => writeStore('geoportugal:recentPhotos', v), { deep: true
 watch(cleanEdges, v => writeStore('geoportugal:cleanEdges', v))
 watch(showBoundaries, v => writeStore('geoportugal:boundaries', v))
 watch(showCoverage, v => writeStore('geoportugal:coverage', v))
+watch(showSheets, v => writeStore('geoportugal:sheets', v))
 
 // ---------------------------------------------------------------------------
 // Derived
@@ -401,7 +403,7 @@ async function restoreFromUrl() {
 export function useFototeca() {
   return {
     // state
-    map, tab, area, boundary, showBoundaries, showCoverage, summary, summaryState, years, scales, newestFirst,
+    map, tab, area, boundary, showBoundaries, showCoverage, showSheets, summary, summaryState, years, scales, newestFirst,
     photos, total, photosState, hovered, selected, overlays, cleanEdges, showFootprints,
     basemap, compare, mode, viewer, timelapse, openTimelapse, favs, recentAreas, recentPhotos, view,
     // derived

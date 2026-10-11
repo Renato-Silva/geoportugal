@@ -13,6 +13,18 @@ const tabs = computed<{ id: Tab, label: string, badge?: number }[]>(() => [
   { id: 'saved', label: t('tab.saved'), badge: store.favs.value.length || undefined },
 ])
 
+const sheets = useSheets()
+onMounted(() => sheets.load())
+/** Carta Militar 1:25 000 sheets for the current area (the point's sheet, or all overlapping) */
+const areaSheets = computed(() => {
+  const a = store.area.value
+  if (!a || !sheets.index.value.length) return ''
+  const list = a.kind === 'point' && a.point ? sheets.sheetsAt(a.point) : sheets.sheetsIn(a.bbox)
+  if (!list.length) return ''
+  const shown = list.slice(0, 8).map(s => sheets.sheetLabel(s)).join(', ')
+  return `${t('sheets.label')} · ${list.length === 1 ? t('sheets.sheet', { n: shown }) : t('sheets.sheets', { list: shown })}${list.length > 8 ? ` +${list.length - 8}` : ''}`
+})
+
 const scroller = ref<HTMLElement>()
 watch(store.tab, () => scroller.value?.scrollTo({ top: 0 }))
 watch(store.area, (a) => { if (a) collapsed.value = false })
@@ -76,7 +88,8 @@ watch(store.area, (a) => { if (a) collapsed.value = false })
         <AreaTools />
 
         <!-- current area -->
-        <div v-if="store.area.value" class="rise flex items-center gap-2 rounded-xl bg-accent-soft px-3 py-2.5 text-ink ring-1 ring-accent/25">
+        <div v-if="store.area.value" class="space-y-1.5">
+          <div v-if="store.area.value" class="rise flex items-center gap-2 rounded-xl bg-accent-soft px-3 py-2.5 text-ink ring-1 ring-accent/25">
           <Icon :name="store.area.value.kind === 'point' ? 'pin' : store.area.value.kind === 'box' ? 'box' : store.area.value.kind === 'view' ? 'view' : 'search'" :size="16" class="shrink-0 text-accent" />
           <button type="button" class="min-w-0 flex-1 truncate text-left text-sm font-medium hover:underline" @click="store.fitBbox(store.area.value!.bbox)">
             {{ store.area.value.label }}
@@ -84,6 +97,8 @@ watch(store.area, (a) => { if (a) collapsed.value = false })
           <button type="button" class="grid size-6 shrink-0 place-items-center rounded-md text-ink-2 hover:bg-card hover:text-ink" :aria-label="t('area.clear')" :title="t('area.clear')" @click="store.clearArea()">
             <Icon name="close" :size="15" />
           </button>
+        </div>
+          <p v-if="areaSheets" class="px-1 text-[11.5px] text-ink-3">{{ areaSheets }}</p>
         </div>
 
         <CoverageCard v-else />

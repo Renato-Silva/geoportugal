@@ -8,6 +8,8 @@ const store = useFototeca()
 const { t, lang } = useI18n()
 const { isDark } = useTheme()
 const dl = useDownloads()
+const sheets = useSheets()
+onMounted(() => sheets.load())
 
 const v = computed(() => store.viewer.value)
 const photo = computed(() => v.value?.list[v.value.index] ?? null)
@@ -26,6 +28,14 @@ watch(photo, async (p) => {
   }
   catch { /* location is optional */ }
 }, { immediate: true })
+
+// Carta Militar 1:25 000 sheet(s) covering the photo centre
+const sheetText = computed(() => {
+  const p = photo.value
+  if (!p || !sheets.index.value.length) return ''
+  const c: [number, number] = [(p.bbox[0] + p.bbox[2]) / 2, (p.bbox[1] + p.bbox[3]) / 2]
+  return sheets.sheetsAt(c).map(s => t('sheets.sheet', { n: sheets.sheetLabel(s) })).join(', ')
+})
 
 // zoom & pan --------------------------------------------------------------
 const stage = ref<HTMLDivElement>()
@@ -132,6 +142,7 @@ const meta = computed(() => {
   const loc = location.value
   return [
     ...(loc?.municipality ? [[t('photo.location'), [loc.parish?.name, loc.municipality].filter(Boolean).join(', ')] as const] : []),
+    ...(sheetText.value ? [[t('sheets.label'), sheetText.value] as const] : []),
     [t('photo.date'), formatDate(p.date, lang.value)],
     [t('photo.scale'), formatScale(p.scale, lang.value)],
     [t('photo.roll'), p.rolo],

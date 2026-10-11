@@ -64,6 +64,8 @@ The image runs as a non-root user.
 - **Then / now** swipe against DGT orthophotos of a chosen year (2007, 2010, 2012, 2015, 2018, 2021 or the 2023 satellite orthomosaic), with satellite imagery below zoom 10
 - Basemaps: map, OpenStreetMap, satellite, DGT orthophotos 2007–2021 and OrtoSat 2023
 - Optional administrative boundaries layer; each photo shows its parish and municipality
+- **Carta Militar** (CIGeoE): the 1:500 000 *Carta Militar Itinerária* as a basemap, plus the
+  1:25 000 sheet grid (M888 / M889 / P821) as an overlay; photos and search areas show their sheet numbers
 - Photo viewer with zoom/pan, keyboard navigation, metadata, download
 - Saved photos, recent searches and recently viewed (stored in the browser)
 - Shareable URLs (view, area, filters, photos on the map, open photo)
@@ -77,6 +79,8 @@ The image runs as a non-root user.
 | Place search | CAOP name index (WFS) + DGT/INE gazetteer (`snic…/geonames`) | `/api/places` |
 | Boundaries | CAOP WFS (`geo2…/caop_continente`, `caop_ram`, `caop_raa`), simplified | `/api/boundary`, `/api/locate` |
 | Boundary lines | CAOP WMS (`*_trocos`) | browser → WMS directly |
+| Carta Militar Itinerária 1:500 000 | CIGeoE WMS `cigeoe:carta_itineraria` (`webservices.igeoe.pt`) | `/api/itineraria` (XYZ tiles, PNG passthrough, archived — no CORS upstream) |
+| 1:25 000 sheet index | CIGeoE WFS `cigeoe:cartograma_m888` / `m889` / `p821` | `/api/sheets` |
 | Counts per year × scale | `geo5…/fototeca/agruparAnoEscala` (one call per decade) | proxied: `/api/summary` |
 | Footprints + metadata | GeoServer WFS `dgt:Enquadramento_fotos_v2` | browser → WFS directly (POST; boundary polygons go inline in the CQL filter) |
 | Photos | `geo5…/fototeca/imagem` | `/api/photo` (thumb/full WebP, original PNG) |
